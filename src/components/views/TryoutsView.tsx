@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Award, FileSpreadsheet, FileText } from 'lucide-react';
-import { useAppState } from '../../lib/store';
+import { useAppState, toTryoutResultFromUtbkScore } from '../../lib/store';
 import { Tryout, TryoutResult } from '../../types';
 import { cn } from '../../lib/utils';
 import { Button } from '@/components/ui/button';
@@ -65,12 +65,19 @@ export const TryoutsView: React.FC<TryoutsViewProps> = ({ onTakeTryout }) => {
   const [page, setPage] = useState(1);
   const [handlingExport, setHandlingExport] = useState<'none' | 'pdf' | 'excel'>('none');
 
-  const totalPages = Math.max(1, Math.ceil(state.results.length / RESULTS_PAGE_SIZE));
+  // Hasil "Kerjakan Tryout" tidak lagi direkam; riwayat nilai diturunkan dari
+  // utbk_scores (sumber nilai tunggal terbaru milik user).
+  const results = useMemo(
+    () => state.utbkScores.map(s => toTryoutResultFromUtbkScore(s, state.profile.id)),
+    [state.utbkScores, state.profile.id]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(results.length / RESULTS_PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * RESULTS_PAGE_SIZE;
   const pageResults = useMemo(
-    () => state.results.slice(pageStart, pageStart + RESULTS_PAGE_SIZE),
-    [state.results, pageStart]
+    () => results.slice(pageStart, pageStart + RESULTS_PAGE_SIZE),
+    [results, pageStart]
   );
 
   const handleBedah = useCallback((res: TryoutResult) => {
@@ -83,26 +90,26 @@ export const TryoutsView: React.FC<TryoutsViewProps> = ({ onTakeTryout }) => {
     setHandlingExport('pdf');
     try {
       const { exportResultsPDF } = await import('../../lib/exportUtils');
-      await exportResultsPDF(state.results, state.profile.full_name);
+      await exportResultsPDF(results, state.profile.full_name);
     } catch (e) {
       console.warn('Gagal export PDF:', e);
     } finally {
       setHandlingExport('none');
     }
-  }, [handlingExport, state.results, state.profile.full_name]);
+  }, [handlingExport, results, state.profile.full_name]);
 
   const handleExportExcel = useCallback(async () => {
     if (handlingExport !== 'none') return;
     setHandlingExport('excel');
     try {
       const { exportResultsExcel } = await import('../../lib/exportUtils');
-      await exportResultsExcel(state.results, state.profile.full_name);
+      await exportResultsExcel(results, state.profile.full_name);
     } catch (e) {
       console.warn('Gagal export Excel:', e);
     } finally {
       setHandlingExport('none');
     }
-  }, [handlingExport, state.results, state.profile.full_name]);
+  }, [handlingExport, results, state.profile.full_name]);
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
@@ -126,7 +133,7 @@ export const TryoutsView: React.FC<TryoutsViewProps> = ({ onTakeTryout }) => {
               variant="outline"
               size="sm"
               onClick={handleExportPDF}
-              disabled={handlingExport !== 'none' || state.results.length === 0}
+              disabled={handlingExport !== 'none' || results.length === 0}
               className="rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-bold gap-2 border border-rose-200 dark:border-rose-800 disabled:opacity-50"
             >
               <FileText className="w-3.5 h-3.5" />
@@ -136,7 +143,7 @@ export const TryoutsView: React.FC<TryoutsViewProps> = ({ onTakeTryout }) => {
               variant="outline"
               size="sm"
               onClick={handleExportExcel}
-              disabled={handlingExport !== 'none' || state.results.length === 0}
+              disabled={handlingExport !== 'none' || results.length === 0}
               className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 text-xs font-bold gap-2 border border-emerald-200 dark:border-emerald-800 disabled:opacity-50"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -167,7 +174,7 @@ export const TryoutsView: React.FC<TryoutsViewProps> = ({ onTakeTryout }) => {
               ))}
             </TableBody>
           </Table>
-          {state.results.length === 0 ? (
+          {results.length === 0 ? (
             <div className="py-16 px-6 text-center">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-primary flex items-center justify-center mx-auto mb-4">
                 <Award className="w-6 h-6" />
@@ -178,7 +185,7 @@ export const TryoutsView: React.FC<TryoutsViewProps> = ({ onTakeTryout }) => {
           ) : totalPages > 1 ? (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 dark:border-border bg-slate-50/50 dark:bg-muted/20">
               <span className="text-xs font-semibold text-slate-400">
-                Menampilkan {pageStart + 1}-{Math.min(pageStart + RESULTS_PAGE_SIZE, state.results.length)} dari {state.results.length} hasil
+                Menampilkan {pageStart + 1}-{Math.min(pageStart + RESULTS_PAGE_SIZE, results.length)} dari {results.length} hasil
               </span>
               <div className="flex items-center gap-2">
                 <Button

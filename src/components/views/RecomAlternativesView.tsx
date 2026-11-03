@@ -110,13 +110,16 @@ export const RecomAlternativesView: React.FC<RecomAlternativesViewProps> = ({ se
             const isRecentlyAdded = addedIds.includes(altMajor.id);
 
             let chanceColor = 'bg-emerald-500 text-white';
-            let chanceLabel = 'Sangat Aman';
-            if (altMajor.chance_percentage < 70) {
+            let chanceLabel = 'Aman';
+            if (altMajor.chance_percentage < 35) {
+              chanceColor = 'bg-rose-500 text-white';
+              chanceLabel = 'Sangat Ambisius';
+            } else if (altMajor.chance_percentage < 65) {
               chanceColor = 'bg-amber-500 text-white';
-              chanceLabel = 'Moderat';
+              chanceLabel = 'Ambisius';
             } else if (altMajor.chance_percentage < 85) {
               chanceColor = 'bg-teal-500 text-white';
-              chanceLabel = 'Peluang Besar';
+              chanceLabel = 'Kompetitif';
             }
 
             return (

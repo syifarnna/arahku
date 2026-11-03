@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Calendar, Download, FileSpreadsheet, FileText, Filter, Printer } from 'lucide-react';
-import { useAppState } from '../../lib/store';
+import { useAppState, toTryoutResultFromUtbkScore } from '../../lib/store';
 import { exportAnalysisPDF, exportResultsExcel, exportResultsPDF } from '../../lib/exportUtils';
 import { appStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
@@ -14,13 +14,18 @@ export const ReportsView: React.FC = () => {
 
   const summary = appStore.getAnalysis();
 
-  const filteredResults = state.results.filter(r => {
-    if (filterPeriod === 'semua') return true;
-    const resMonth = new Date(r.created_at).getMonth();
-    const currMonth = new Date().getMonth();
-    if (filterPeriod === 'bulan_ini') return resMonth === currMonth;
-    return true;
-  });
+  // Hasil "Kerjakan Tryout" tidak lagi direkam; riwayat nilai diturunkan dari
+  // utbk_scores (sumber nilai tunggal terbaru milik user).
+  const results = useMemo(
+    () => state.utbkScores.map(s => toTryoutResultFromUtbkScore(s, state.profile.id)),
+    [state.utbkScores, state.profile.id]
+  );
+
+  const filteredResults = useMemo(() => {
+    if (filterPeriod === 'semua') return results;
+    const nowMonth = new Date().getMonth();
+    return results.filter(r => new Date(r.created_at).getMonth() === nowMonth);
+  }, [results, filterPeriod]);
 
   return (
     <div className="space-y-8 pb-16 animate-in fade-in duration-300">

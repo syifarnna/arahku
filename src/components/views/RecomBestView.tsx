@@ -37,13 +37,28 @@ export const RecomBestView: React.FC<{ setActiveTab?: (tab: string) => void }> =
   // Fallback: jika user belum menyimpan minat, pakai hasil tes penjurusan (jika ada).
   const interest = state.profile.major_interest ?? lastResult?.dominant ?? null;
 
-  const { tier1, tier2, totalReachable } = useMemo(() => {
-    if (autoScore == null || !interest) return { tier1: [] as typeof state.majors, tier2: [] as typeof state.majors, totalReachable: 0 };
-    const reachable = state.majors.filter(m => m.passing_grade_total != null && m.passing_grade_total <= autoScore);
+  const { tier1, tier2, tier3, totalReachable } = useMemo(() => {
+    if (autoScore == null || !interest) return { tier1: [] as typeof state.majors, tier2: [] as typeof state.majors, tier3: [] as typeof state.majors, totalReachable: 0 };
+    // Zona Aman: skor >= PG
+    const safe = state.majors.filter(m => m.passing_grade_total != null && m.passing_grade_total > 0 && autoScore >= m.passing_grade_total);
+    // Zona Kompetitif: 97% <= skor/PG < 100%
+    const competitive = state.majors.filter(m => {
+      if (!m.passing_grade_total || m.passing_grade_total <= 0) return false;
+      const r = autoScore / m.passing_grade_total;
+      return r >= 0.97 && r < 1.0;
+    });
+    // Zona Ambisius: 90% <= skor/PG < 97%
+    const ambitious = state.majors.filter(m => {
+      if (!m.passing_grade_total || m.passing_grade_total <= 0) return false;
+      const r = autoScore / m.passing_grade_total;
+      return r >= 0.90 && r < 0.97;
+    });
     const byGradeDesc = (a: typeof state.majors[0], b: typeof state.majors[0]) => (b.passing_grade_total || 0) - (a.passing_grade_total || 0);
-    const t1 = reachable.filter(m => isRumpunMatch(m.cluster, interest as ClusterType)).sort(byGradeDesc).slice(0, RANK_TOP);
-    const t2 = reachable.filter(m => !isRumpunMatch(m.cluster, interest as ClusterType)).sort(byGradeDesc).slice(0, RANK_ALT);
-    return { tier1: t1, tier2: t2, totalReachable: reachable.length };
+    const matchFilter = (list: typeof state.majors) => list.filter(m => isRumpunMatch(m.cluster, interest as ClusterType));
+    const t1 = matchFilter(safe).sort(byGradeDesc).slice(0, RANK_TOP);
+    const t2 = competitive.filter(m => !isRumpunMatch(m.cluster, interest as ClusterType)).sort(byGradeDesc).slice(0, RANK_ALT);
+    const t3 = matchFilter(ambitious).sort(byGradeDesc).slice(0, RANK_ALT);
+    return { tier1: t1, tier2: t2, tier3: t3, totalReachable: safe.length + competitive.length + ambitious.length };
   }, [state.majors, autoScore, interest]);
 
   const campusName = (id: number) => state.institutions.find(i => i.id === id)?.name || '—';
@@ -183,12 +198,12 @@ export const RecomBestView: React.FC<{ setActiveTab?: (tab: string) => void }> =
             <div className="flex items-center gap-2 mb-3">
               <Layers className="w-5 h-5 text-slate-400" />
               <h3 className="font-extrabold text-base text-slate-800 dark:text-white">
-                Alternatif — Nilai Terpenuhi, Rumpun Berbeda ({tier2.length})
+                Alternatif — Kompetitif, Nilai Mendekati Passing Grade ({tier2.length})
               </h3>
             </div>
             {tier2.length === 0 ? (
               <Card className="p-6 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
-                <p className="text-sm text-slate-500">Tidak ada prodi alternatif yang dapat dijangkau nilai Anda.</p>
+                <p className="text-sm text-slate-500">Belum ada prodi alternatif di zona kompetitif untuk nilai Anda.</p>
               </Card>
             ) : (
               <div className="space-y-2">
@@ -197,10 +212,28 @@ export const RecomBestView: React.FC<{ setActiveTab?: (tab: string) => void }> =
             )}
           </div>
 
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Compass className="w-5 h-5 text-amber-500" />
+              <h3 className="font-extrabold text-base text-slate-800 dark:text-white">
+                Zona Ambisius — Rumpun {clusterStyle[interest].label} &amp; Nilai Mendekati Passing Grade ({tier3.length})
+              </h3>
+            </div>
+            {tier3.length === 0 ? (
+              <Card className="p-6 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
+                <p className="text-sm text-slate-500">Belum ada prodi rumpun <strong>{clusterStyle[interest].label}</strong> di zona ambisius untuk nilai Anda.</p>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {tier3.map((m, i) => renderProdiRow(m, i + 1, 'alt'))}
+              </div>
+            )}
+          </div>
+
           <Card className="p-5 rounded-2xl bg-card border border-slate-100 dark:border-border shadow-xs flex flex-wrap items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
             <p className="text-xs text-slate-600 dark:text-slate-300 flex-1 min-w-[240px]">
-              Rekomendasi diurutkan dari yang paling relevan: <strong>rumpun {clusterStyle[interest].label}</strong> dengan passing grade ≤ nilai Anda (urutan grade tertinggi ke terendah), lalu prodi alternatif rumpun lain yang tetap terjangkau nilai Anda.
+              Rekomendasi diurutkan dari yang paling relevan: <strong>rumpun {clusterStyle[interest].label}</strong> dengan passing grade ≤ nilai Anda (zona Aman), lalu prodi rumpun lain / nilai mendekati passing grade Anda (zona Kompetitif &amp; Ambisius) yang masih terjangkau.
             </p>
             <Button variant="outline" size="sm" onClick={() => setActiveTab?.('recom_alternatives')} className="gap-2 text-[11px] font-bold">
               Lihat Rekomendasi Alternatif Lengkap

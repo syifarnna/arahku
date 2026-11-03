@@ -127,14 +127,26 @@ export const DashboardView: React.FC<{ onTakeTryout: (t: any) => void; setActive
   }, [searchQuery, jenjang, rumpun, hasActiveFilters]);
 
   const fmt = (n?: number | null) => n == null ? '—' : formatNumber(n);
+
+  // Keketangan (tightness) prodi = rasio jumlah peminat terhadap daya tampung (%).
+  // Bukan passing grade percentage — nilai yang benar untuk "keketangan" kompetisi.
+  const tightness = (m: Major) => (m.daya_tampung && m.daya_tampung > 0 && m.peminat != null) ? `${((m.peminat / m.daya_tampung) * 100).toFixed(0)}%` : '—';
+
   const activeTargetMajorId = state.activeTargetMajorId || state.targetMajorIds[0];
   const targetMajor = activeTargetMajorId ? state.majors.find(m => m.id === activeTargetMajorId) : undefined;
   const latestUtbkScore = appStore.getUtbkLatestScore();
   const avgScore = state.utbkScores.length > 0 ? (state.utbkScores.reduce((a, b) => a + b.total_score, 0) / state.utbkScores.length).toFixed(1) : '0';
   const isPassedTarget = latestUtbkScore != null && targetMajor && latestUtbkScore >= targetMajor.passing_grade_total;
   const gapValue = latestUtbkScore != null && targetMajor ? (latestUtbkScore - targetMajor.passing_grade_total).toFixed(1) : '0';
-  const completedTryoutIds = new Set(state.results.map(r => r.tryout_id));
-  const availableTryouts = state.tryouts.filter(t => !completedTryoutIds.has(t.id));
+
+  // Rata-rata keketangan (tightness) dihitung dari data prodi yang memiliki
+  // rasio peminat/daya_tampung — bukan rata-rata persentase passing grade.
+  const avgKeketangan = useMemo(() => {
+    const vals = state.majors
+      .map(m => (m.daya_tampung && m.daya_tampung > 0 && m.peminat != null) ? (m.peminat / m.daya_tampung) * 100 : null)
+      .filter((v): v is number => v != null);
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  }, [state.majors]);
 
 // ===== Countdown UTBK-SNBT 2027 =====
 const UTBK_EVENTS = [
@@ -442,7 +454,7 @@ const utbkCountdown = useMemo(() => {
             }
             const inst = state.institutions.find(i => i.id === m.institution_id);
             const cs = CLUSTER_STYLE[m.cluster === 'Saintek' || m.cluster === 'Soshum' || m.cluster === 'Campuran' ? m.cluster : 'Campuran'];
-            const keketatan = m.passing_grade_percentage != null ? `${m.passing_grade_percentage}%` : '—';
+            const keketatan = tightness(m);
             return (
               <Card key={m.id} className={cn("p-5 rounded-2xl border border-slate-200 dark:border-border shadow-xs flex flex-col gap-3", cs.row)}>
                 <div className="flex items-start justify-between gap-2">
@@ -513,7 +525,7 @@ const utbkCountdown = useMemo(() => {
                   <div className="grid grid-cols-3 gap-1 text-[10px]">
                     <div><span className="text-slate-400">Daya:</span> <span className="font-bold">{fmt(m.daya_tampung)}</span></div>
                     <div><span className="text-slate-400">Peminat:</span> <span className="font-bold">{fmt(m.peminat)}</span></div>
-                    <div><span className="text-slate-400">%:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{m.passing_grade_percentage != null ? `${m.passing_grade_percentage}%` : '—'}</span></div>
+                    <div><span className="text-slate-400">Keketangan:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{tightness(m)}</span></div>
                   </div>
                 </Card>
               );
@@ -531,7 +543,7 @@ const utbkCountdown = useMemo(() => {
           {[
             { label: 'Total Prodi', value: stats?.totalProdi ?? 0, icon: GraduationCap, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40' },
             { label: 'Total PTN', value: stats?.universitas ?? 0, icon: Building2, color: 'text-sky-500 bg-sky-50 dark:bg-sky-950/40' },
-            { label: 'Rata-rata Keketatan', value: stats ? `${((stats.saintek * 100 + stats.soshum * 100) / (stats.saintek + stats.soshum || 1)).toFixed(1)}%` : '—', icon: TrendingUp, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' },
+            { label: 'Rata-rata Keketatan', value: stats ? (avgKeketangan != null ? `${avgKeketangan.toFixed(1)}%` : '—') : '—', icon: TrendingUp, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' },
             { label: 'Input Nilai UTBK', value: state.utbkScores.length, icon: Award, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40' },
           ].map((s, i) => (
             <Card key={i} className="p-4 rounded-2xl flex items-center gap-3 border-slate-200/70 dark:border-border">

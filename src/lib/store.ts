@@ -24,6 +24,32 @@ import {
 } from './mockData';
 import { supabase } from './supabaseClient';
 
+// Label predikat capaian UTBK dari total score (sumber nilai tunggal: utbk_scores).
+export function getUtbkPredicateLabel(totalScore: number): TryoutResult['predicate'] {
+  if (totalScore >= 710) return 'Sangat Baik';
+  if (totalScore >= 660) return 'Baik';
+  if (totalScore >= 600) return 'Cukup';
+  return 'Kurang';
+}
+
+// Bentuk TryoutResult yang dipakai view untuk riwayat nilai UTBK (hasil "Kerjakan
+// Tryout" tidak lagi direkam; nilai yang tampil berasal dari utbk_scores).
+export function toTryoutResultFromUtbkScore(s: UtbkScore, studentId: string): TryoutResult {
+  return {
+    id: s.id,
+    user_id: s.user_id,
+    student_id: studentId,
+    tryout_id: -1,
+    tryout_name: s.label || 'Input Nilai UTBK',
+    tryout_type: 'UTBK SNBT',
+    tryout_date: s.recorded_on,
+    total_score: s.total_score,
+    predicate: getUtbkPredicateLabel(s.total_score),
+    created_at: s.created_at,
+    scores: s.scores ?? {},
+  };
+}
+
 export interface AppState {
   authChecked: boolean;
   isLoggedIn: boolean;
@@ -556,10 +582,31 @@ class AppStore {
 
     const userInterest = this.state.profile?.major_interest || 'Campuran';
     const alternatives = this.state.majors
-      .filter(m => m.id !== major.id && m.passing_grade_total <= result.total_score)
+      .filter(m => {
+        if (m.id === major.id) return false;
+        if (!m.passing_grade_total || m.passing_grade_total <= 0) return false;
+        // Tampilkan prodi dengan PG hingga +15% di atas skor user (zona ambisius).
+        // Prodi yang terlalu jauh (>15%) tidak relevan sebagai alternatif.
+        const ratio = result.total_score / m.passing_grade_total;
+        return ratio >= 0.85;
+      })
       .map(m => {
-        const diff = result.total_score - m.passing_grade_total;
-        let chance = Math.min(100, Math.round((result.total_score / m.passing_grade_total) * 100));
+        const pg = m.passing_grade_total || 1;
+        const diff = result.total_score - pg;
+        const ratio = result.total_score / pg;
+
+        // Estimasi peluang berbasis rasio skor/PG:
+        //   ≥ 1.00 → 85–99% (Aman)
+        //   0.97–0.99 → 65–84% (Kompetitif)
+        //   0.90–0.96 → 35–64% (Ambisius)
+        //   0.85–0.89 → 10–34% (Sangat Ambisius)
+        let chance: number;
+        if (ratio >= 1.05) chance = 99;
+        else if (ratio >= 1.00) chance = Math.round(85 + (ratio - 1.0) / 0.05 * 14);
+        else if (ratio >= 0.97) chance = Math.round(65 + (ratio - 0.97) / 0.03 * 19);
+        else if (ratio >= 0.90) chance = Math.round(35 + (ratio - 0.90) / 0.07 * 29);
+        else chance = Math.round(10 + (ratio - 0.85) / 0.05 * 24);
+        chance = Math.max(5, Math.min(99, chance));
 
         // Boost for matching cluster
         let matchScore = 0;
@@ -574,12 +621,11 @@ class AppStore {
       })
       .sort((a, b) => {
         if (b._matchScore !== a._matchScore) return b._matchScore - a._matchScore;
-        if (a.gap_diff !== b.gap_diff) return a.gap_diff - b.gap_diff; // sort by closest gap from below
-        return (a.name || '').localeCompare(b.name || ''); // tie breaker
+        if (b.chance_percentage !== a.chance_percentage) return b.chance_percentage - a.chance_percentage;
+        if (a.gap_diff !== b.gap_diff) return b.gap_diff - a.gap_diff;
+        return (a.name || '').localeCompare(b.name || '');
       })
-      .slice(0, 6);
-      
-    console.log('Alternatives count:', alternatives.length, 'total majors:', this.state.majors.length, 'result score:', result.total_score);
+      .slice(0, 12);
 
     return {
       target_major: major,

@@ -226,8 +226,17 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     });
     return Array.from(map.values())
       .map(e => ({ name: e.name, major: e.major, campusCount: e.campuses.size }))
-      .sort((a, b) => (b.major.peminat || 0) - (a.major.peminat || 0) || sortByGradeDesc(a.major, b.major));
-  }, [state.majors, phase, tally, lastResult, sortByGradeDesc]);
+      .sort((a, b) => {
+        const peminatDiff = (b.major.peminat || 0) - (a.major.peminat || 0);
+        if (peminatDiff !== 0) return peminatDiff;
+        // Tie-break: kampus favorit (grade tertinggi) lalu PG tertinggi.
+        const instA = state.institutions.find(i => i.id === a.major.institution_id);
+        const instB = state.institutions.find(i => i.id === b.major.institution_id);
+        const gradeDiff = (instB?.grade || 0) - (instA?.grade || 0);
+        if (gradeDiff !== 0) return gradeDiff;
+        return sortByGradeDesc(a.major, b.major);
+      });
+  }, [state.majors, state.institutions, phase, tally, lastResult, sortByGradeDesc]);
 
   useEffect(() => {
     const reps = recommendedProdi.map(p => p.major);

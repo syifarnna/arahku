@@ -49,12 +49,12 @@ INSERT INTO competencies (code, name, description, weight) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- 2. Insert Universitas Terkemuka
-INSERT INTO institutions (id, name, type, location) VALUES
-(101, 'Institut Teknologi Bandung (ITB)', 'PTN', 'Bandung, Jawa Barat'),
-(102, 'Universitas Indonesia (UI)', 'PTN', 'Depok, Jawa Barat'),
-(103, 'Universitas Gadjah Mada (UGM)', 'PTN', 'Yogyakarta, DIY'),
-(104, 'Institut Teknologi Sepuluh Nopember (ITS)', 'PTN', 'Surabaya, Jawa Timur'),
-(107, 'Universitas Brawijaya (UB)', 'PTN', 'Malang, Jawa Timur')
+INSERT INTO institutions (id, name, type) VALUES
+(101, 'Institut Teknologi Bandung (ITB)', 'PTN'),
+(102, 'Universitas Indonesia (UI)', 'PTN'),
+(103, 'Universitas Gadjah Mada (UGM)', 'PTN'),
+(104, 'Institut Teknologi Sepuluh Nopember (ITS)', 'PTN'),
+(107, 'Universitas Brawijaya (UB)', 'PTN')
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Insert Program Studi Unggulan

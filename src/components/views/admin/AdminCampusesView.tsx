@@ -29,13 +29,12 @@ interface CampusForm {
   name: string;
   abbreviation: string;
   type: InstitutionType;
-  location: string;
   grade: string;
   range_min: string;
   range_max: string;
 }
 
-const emptyForm: CampusForm = { name: '', abbreviation: '', type: 'PTN', location: '', grade: '', range_min: '', range_max: '' };
+const emptyForm: CampusForm = { name: '', abbreviation: '', type: 'PTN', grade: '', range_min: '', range_max: '' };
 
 export const AdminCampusesView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActiveTab }) => {
   const state = useAppState();
@@ -96,7 +95,6 @@ export const AdminCampusesView: React.FC<{ setActiveTab?: (tab: string) => void 
       name: inst.name,
       abbreviation: inst.abbreviation || '',
       type: inst.type,
-      location: inst.location || '',
       grade: inst.grade != null ? String(inst.grade) : '',
       range_min: inst.range_min != null ? String(inst.range_min) : '',
       range_max: inst.range_max != null ? String(inst.range_max) : '',
@@ -113,7 +111,6 @@ export const AdminCampusesView: React.FC<{ setActiveTab?: (tab: string) => void 
       name: form.name.trim(),
       abbreviation: form.abbreviation.trim() || null,
       type: form.type,
-      location: form.location.trim(),
       grade: form.grade ? Number(form.grade) : null,
       range_min: form.range_min ? Number(form.range_min) : null,
       range_max: form.range_max ? Number(form.range_max) : null,
@@ -184,10 +181,6 @@ export const AdminCampusesView: React.FC<{ setActiveTab?: (tab: string) => void 
                 <Input type="text" value={form.abbreviation} onChange={e => setForm({ ...form, abbreviation: e.target.value })} className="h-10" placeholder="contoh: UI (boleh beberapa: UPNVYK, UPNYK)" />
               </div>
               <div>
-                <Label className="text-xs font-semibold text-slate-500 mb-1.5 block">Lokasi</Label>
-                <Input type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className="h-10" placeholder="contoh: Bandung, Jawa Barat" />
-              </div>
-              <div>
                 <Label className="text-xs font-semibold text-slate-500 mb-1.5 block">Grade Campus (batas nilai masuk)</Label>
                 <Input type="number" step="0.1" value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })} className="h-10" placeholder="contoh: 645.5" />
               </div>
@@ -213,7 +206,7 @@ export const AdminCampusesView: React.FC<{ setActiveTab?: (tab: string) => void 
       <div className="flex flex-wrap items-center gap-2 bg-card rounded-2xl border border-slate-200 dark:border-border p-3 shadow-sm">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama kampus atau lokasi..." className="pl-9 h-9" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama kampus..." className="pl-9 h-9" />
         </div>
         <span className="ml-auto text-xs font-semibold text-slate-400">{filtered.length} kampus tampil</span>
       </div>
@@ -244,7 +237,6 @@ export const AdminCampusesView: React.FC<{ setActiveTab?: (tab: string) => void 
                 <TableRow key={inst.id} className="hover:bg-slate-50/50 dark:hover:bg-muted/80">
                   <TableCell className="px-6 py-4">
                     <p className="font-bold text-slate-800 dark:text-white text-sm">{inst.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-muted-foreground mt-0.5">{inst.location || '—'}</p>
                   </TableCell>
                   <TableCell className="px-6 py-4 text-center">
                     <Badge variant="outline" className={cn('rounded-md text-[11px] font-bold h-auto py-1', typeColor[inst.type] || typeColor.PTN)}>
@@ -484,7 +476,6 @@ const AdminCampusDetail: React.FC<{
                 {campus.type}
               </Badge>
             </div>
-            <p className="text-sm text-slate-500 dark:text-muted-foreground mt-1">{campus.location || '—'}</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
             <div className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-muted/50">

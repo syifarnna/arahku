@@ -162,7 +162,6 @@ export function CampusCombobox({
                         {inst.name}
                         {abbr ? <span className="text-slate-400 font-normal"> ({abbr})</span> : null}
                       </span>
-                      <span className="block truncate text-[11px] text-slate-400">{inst.location || "—"}</span>
                     </span>
                     {isSel && <Check className="w-4 h-4 shrink-0 text-primary" />}
                   </button>

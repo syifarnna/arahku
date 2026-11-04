@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Building2, GraduationCap, Target, Layers, Loader2, ArrowLeft, MapPin, ChevronRight, School } from 'lucide-react';
+import { Search, Building2, GraduationCap, Target, Layers, Loader2, ArrowLeft, ChevronRight, School } from 'lucide-react';
 import { useAppState, appStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { searchMajors, getMajorsStats, useDebouncedValue, MajorsStats } from '../../lib/prodiSearch';
@@ -233,9 +233,6 @@ export const CampusList: React.FC = () => {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-muted-foreground mt-1 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 shrink-0" /> {i.location || '—'}
-                  </p>
                 </div>
                 <Badge variant="outline" className={cn('rounded-md text-[10px] font-bold h-auto px-2 py-1 shrink-0', TYPE_STYLE[i.type] || TYPE_STYLE.PTN)}>
                   {i.type}
@@ -373,9 +370,6 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
                 {institution.type}
               </Badge>
             </div>
-            <p className="text-sm text-slate-500 dark:text-muted-foreground mt-1 flex items-center gap-1.5">
-              <MapPin className="w-4 h-4" /> {institution.location || '—'}
-            </p>
           </div>
           <div className="grid grid-cols-2 min-[420px]:grid-cols-4 gap-2 sm:gap-3 text-center">
             <div className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-muted/50">

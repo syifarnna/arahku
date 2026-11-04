@@ -12,7 +12,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { ScoreLineChart } from '@/components/ui/ScoreLineChart';
 import { UtbkInputModal } from '@/components/modals/UtbkInputModal';
 import Swal from 'sweetalert2';
-import { Search, Target, GraduationCap, Building2, Layers, TrendingUp, AlertCircle, CheckCircle2, Clock, BookOpen, Sparkles, ArrowRight, Info, Award, Compass, MapPin, PlusCircle, Pencil, Trash2 } from 'lucide-react';
+import { Search, Target, GraduationCap, Building2, Layers, TrendingUp, AlertCircle, CheckCircle2, Clock, BookOpen, Sparkles, ArrowRight, Info, Award, Compass, PlusCircle, Pencil, Trash2 } from 'lucide-react';
 import type { Major, ClusterType, UtbkScore } from '../../types';
 
 type JenjangFilter = 'SEMUA' | 'S1' | 'D4' | 'D3';
@@ -314,24 +314,6 @@ const utbkCountdown = useMemo(() => {
           </div>
           <Button onClick={() => setActiveTab('tes_minat')} className="shrink-0 gap-1.5 text-xs">
             <Sparkles className="w-3.5 h-3.5" /> Ikuti Tes Penjurusan
-          </Button>
-        </div>
-      )}
-
-      {/* Onboarding: Belum melengkapi lokasi domisili */}
-      {(!state.profile.province || !state.profile.city) && (
-        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-linear-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
-              <MapPin className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-800 dark:text-white">Lengkapi lokasi domisilimu</p>
-              <p className="text-xs text-slate-500 dark:text-muted-foreground">Isi provinsi &amp; kota/kabupaten di Profil agar rekomendasi jurusan &amp; kampus terdekat lebih akurat.</p>
-            </div>
-          </div>
-          <Button onClick={() => setActiveTab('profile')} className="shrink-0 gap-1.5 text-xs">
-            <MapPin className="w-3.5 h-3.5" /> Atur Lokasi di Profil
           </Button>
         </div>
       )}

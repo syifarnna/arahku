@@ -474,7 +474,6 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                         </div>
                         <div>
                           <p className="font-bold text-sm text-slate-800 dark:text-white">{inst.name}</p>
-                          <p className="text-[11px] text-slate-400">{inst.location || ''}</p>
                         </div>
                       </div>
                       <Badge variant="outline" className="rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">

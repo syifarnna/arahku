@@ -6,9 +6,9 @@ export function normalizeForSearch(value?: string | null): string {
   return (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
-// Daftar istilah pencarian sebuah kampus: nama, lokasi, dan singkatan (boleh beberapa alias dipisah koma).
+// Daftar istilah pencarian sebuah kampus: nama, jenis, dan singkatan (boleh beberapa alias dipisah koma).
 export function institutionSearchTerms(inst: Institution): string[] {
-  const terms: string[] = [inst.name, inst.location, inst.type].filter(
+  const terms: string[] = [inst.name, inst.type].filter(
     (t): t is string => !!t
   );
   if (inst.abbreviation) {
@@ -22,7 +22,7 @@ export function institutionSearchTerms(inst: Institution): string[] {
   return terms;
 }
 
-// Cek apakah kampus cocok dengan query (nama, lokasi, jenis, atau singkatan).
+// Cek apakah kampus cocok dengan query (nama, jenis, atau singkatan).
 export function matchesInstitution(inst: Institution, query: string): boolean {
   const q = normalizeForSearch(query);
   if (!q) return true;

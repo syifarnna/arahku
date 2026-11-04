@@ -654,7 +654,7 @@ class AppStore {
       const { data: instData } = await supabase.from('institutions').select('*').order('name', { ascending: true }).limit(5000);
       if (instData && instData.length > 0) this.state.institutions = instData;
 
-      const { data: majorsData, error: majorsErr } = await supabase.from('majors').select('*, institutions(name, location, type)').order('id', { ascending: false }).limit(10000);
+      const { data: majorsData, error: majorsErr } = await supabase.from('majors').select('*, institutions(name, type)').order('id', { ascending: false }).limit(10000);
       if (majorsErr) {
         console.warn('Error fetching majors master:', majorsErr);
         // Fallback to simple select without join
@@ -666,7 +666,6 @@ class AppStore {
         this.state.majors = majorsData.map((m: any) => ({
           ...m,
           institution_name: m.institutions?.name,
-          institution_location: m.institutions?.location,
           institution_type: m.institutions?.type
         }));
       }
@@ -759,7 +758,7 @@ class AppStore {
     try {
       const { data, error } = await supabase
         .from('majors')
-        .select('*, institutions(name, location, type)')
+        .select('*, institutions(name, type)')
         .in('id', missingIds)
         .limit(500);
       if (error) {
@@ -770,7 +769,6 @@ class AppStore {
       const mapped: Major[] = data.map((m: any) => ({
         ...m,
         institution_name: m.institutions?.name,
-        institution_location: m.institutions?.location,
         institution_type: m.institutions?.type,
       }));
       const known = new Set(this.state.majors.map(x => x.id));
@@ -853,7 +851,7 @@ class AppStore {
     this.state.majors = this.state.majors.map(m => (m.id === major.id ? { ...major } : m));
     this.notify();
     try {
-      const { id, institution_name, institution_location, institution_type, ...rest } = major as any;
+      const { id, institution_name, institution_type, ...rest } = major as any;
       const { error } = await supabase.from('majors').update(rest).eq('id', id);
       if (error) console.warn('Gagal update prodi:', error.message);
     } catch (e) {
@@ -867,7 +865,7 @@ class AppStore {
     try {
       const { data, error } = await supabase
         .from('majors')
-        .select('*, institutions(name, location, type)')
+        .select('*, institutions(name, type)')
         .eq('institution_id', institutionId)
         .order('passing_grade_total', { ascending: true, nullsFirst: true })
         .limit(2000);
@@ -880,7 +878,6 @@ class AppStore {
       const mapped: Major[] = data.map((m: any) => ({
         ...m,
         institution_name: m.institutions?.name,
-        institution_location: m.institutions?.location,
         institution_type: m.institutions?.type,
       }));
       const known = new Set(this.state.majors.map(x => x.id));
@@ -914,7 +911,6 @@ class AppStore {
       .update({
         name: inst.name,
         type: inst.type,
-        location: inst.location,
         grade: inst.grade ?? null,
         range_min: inst.range_min ?? null,
         range_max: inst.range_max ?? null,

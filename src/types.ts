@@ -9,8 +9,6 @@ export interface Profile {
   phone: string;
   school: string;
   major_interest: ClusterType | null;
-  province?: string;
-  city?: string;
   avatar_url?: string;
   role?: 'admin' | 'peserta';
   is_profile_complete?: boolean;
@@ -24,9 +22,6 @@ export interface Institution {
   name: string;
   abbreviation?: string; // singkatan populer, boleh beberapa dipisah koma (mis. "ITB")
   type: InstitutionType;
-  location: string;
-  province?: string;
-  city?: string;
   logo?: string;
   grade?: number;      // Grade Campus: batas nilai/nilai minimum masuk kampus
   range_min?: number;  // Range Nilai bawah (nilai tryout terendah prodi di kampus)
@@ -80,7 +75,6 @@ export interface Major {
   id: number;
   institution_id: number;
   institution_name?: string;
-  institution_location?: string;
   institution_type?: InstitutionType;
   code?: string;
   name: string;

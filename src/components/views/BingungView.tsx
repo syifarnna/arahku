@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import { BookOpen, Brain, Briefcase, Building2, CheckCircle2, ChevronRight, Compass, HelpCircle, Loader2, MapPin, RotateCcw, Save, Sparkles, Target, Trash2, X, TrendingUp, Award, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
+import { BookOpen, Brain, Briefcase, Building2, CheckCircle2, ChevronRight, Compass, HelpCircle, Loader2, RotateCcw, Save, Sparkles, Target, Trash2, X, TrendingUp, Award, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { appStore, useAppState } from '../../lib/store';
 import { supabase } from '../../lib/supabaseClient';
@@ -142,25 +142,9 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     } catch { return null; }
   }, []);
 
-  const homeLocation = useMemo(
-    () => ({ province: state.profile.province || '', city: state.profile.city || '' }),
-    [state.profile.province, state.profile.city]
-  );
-
-  // Prioritas kedekatan kampus dgn domisili siswa: 0 = sekota, 1 = se-provinsi, 2 = lain.
-  const proximityTier = useCallback((major: Major): number => {
-    if (!homeLocation.province) return 2;
-    const inst = state.institutions.find(i => i.id === major.institution_id);
-    if (!inst?.province) return 2;
-    const sameProv = inst.province.toLowerCase() === homeLocation.province.toLowerCase();
-    if (!sameProv) return 2;
-    if (homeLocation.city && inst.city && inst.city.toLowerCase() === homeLocation.city.toLowerCase()) return 0;
-    return 1;
-  }, [homeLocation, state.institutions]);
-
-  const byProximity = useCallback((a: Major, b: Major): number =>
-    proximityTier(a) - proximityTier(b) || (a.passing_grade_total || 0) - (b.passing_grade_total || 0),
-  [proximityTier]);
+  const sortByGradeAsc = useCallback((a: Major, b: Major): number =>
+    (a.passing_grade_total || 0) - (b.passing_grade_total || 0),
+  []);
 
   const start = () => {
     if (total === 0) return;
@@ -207,7 +191,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
         : m.cluster === dom
     );
     const map = new Map<string, { name: string; major: Major; campuses: Set<number> }>();
-    [...pool].sort(byProximity).forEach(m => {
+    [...pool].sort(sortByGradeAsc).forEach(m => {
       const key = prodiName(m.name);
       const entry = map.get(key);
       if (entry) entry.campuses.add(m.institution_id);
@@ -215,9 +199,9 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     });
     return Array.from(map.values())
       .map(e => ({ name: e.name, major: e.major, campusCount: e.campuses.size }))
-      .sort((a, b) => byProximity(a.major, b.major))
+      .sort((a, b) => sortByGradeAsc(a.major, b.major))
       .slice(0, 24);
-  }, [state.majors, phase, tally, lastResult, byProximity]);
+  }, [state.majors, phase, tally, lastResult, sortByGradeAsc]);
 
   useEffect(() => {
     const reps = recommendedProdi.map(p => p.major);
@@ -249,7 +233,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     try {
       const { data, error } = await supabase
         .from('majors')
-        .select('*, institutions(id, name, location, type, grade, range_min, range_max)')
+        .select('*, institutions(id, name, type, grade, range_min, range_max)')
         .ilike('name', `${prodiName(major.name)} - %`)
         .order('passing_grade_total', { ascending: false })
         .limit(100);
@@ -259,9 +243,8 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       }
       const mapped = (data as any[]).map((row: any) => ({
         institution: row.institutions as Institution,
-        major: { ...row, institution_name: row.institutions?.name, institution_location: row.institutions?.location, institution_type: row.institutions?.type } as Major,
+        major: { ...row, institution_name: row.institutions?.name, institution_type: row.institutions?.type } as Major,
       })).filter(x => x.institution);
-      mapped.sort((a, b) => proximityTier(a.major) - proximityTier(b.major));
       setCampusesForMajor(mapped);
     } catch {
       setCampusesForMajor([]);
@@ -276,7 +259,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     try {
       const { data, error } = await supabase
         .from('majors')
-        .select('*, institutions(id, name, location, type, grade, range_min, range_max, province, city)')
+        .select('*, institutions(id, name, type, grade, range_min, range_max)')
         .ilike('name', `${prodiName(major.name)} - %`)
         .order('passing_grade_total', { ascending: false })
         .limit(200);
@@ -286,7 +269,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       }
       const mapped = (data as any[]).map((row: any) => ({
         institution: row.institutions as Institution,
-        major: { ...row, institution_name: row.institutions?.name, institution_location: row.institutions?.location, institution_type: row.institutions?.type } as Major,
+        major: { ...row, institution_name: row.institutions?.name, institution_type: row.institutions?.type } as Major,
       })).filter(x => x.institution);
       mapped.sort((a, b) => (b.major.passing_grade_total || 0) - (a.major.passing_grade_total || 0));
       setAllCampusesForPicked(mapped);
@@ -326,9 +309,8 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     const top = [...withPg].sort((a, b) => grade(b) - grade(a)).slice(0, 6);
     const topIds = new Set(top.map(c => c.major.id));
     const rest = withPg.filter(c => !topIds.has(c.major.id));
-    // Pas & Aman: kedekatan domisili didahulukan, lalu PG tertinggi.
-    const byNear = (a: CampusEntry, b: CampusEntry) =>
-      proximityTier(a.major) - proximityTier(b.major) || grade(b) - grade(a);
+    // Pas & Aman: PG tertinggi didahulukan.
+    const byNear = (a: CampusEntry, b: CampusEntry) => grade(b) - grade(a);
     const below = rest.filter(c => grade(c) <= autoScore);
     const pas = below
       .filter(c => autoScore - grade(c) < 50)
@@ -337,7 +319,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       .filter(c => autoScore - grade(c) >= 50)
       .sort(byNear);
     return { top, pas, aman };
-  }, [autoScore, allCampusesForPicked, proximityTier]);
+  }, [autoScore, allCampusesForPicked]);
 
   const renderResult = (dominant: ClusterType) => {
     const s = clusterStyle[dominant];
@@ -418,35 +400,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
               <Sparkles className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-base text-slate-800 dark:text-white">Rekomendasi Jurusan untuk Anda ({s.label})</h3>
             </div>
-            {homeLocation.province && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900 text-[10px] font-bold px-3 py-1">
-                <MapPin className="w-3 h-3" /> {homeLocation.city || homeLocation.province}
-              </span>
-            )}
           </div>
-
-          {homeLocation.province ? (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-4">
-              Diurutkan dari jurusan dengan kampus terdekat dari domisilimu ({homeLocation.city ? `${homeLocation.city}, ` : ''}{homeLocation.province}).
-            </p>
-          ) : (
-            <Card className="p-4 mb-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <MapPin className="w-4 h-4 text-amber-500 shrink-0" />
-                <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
-                  Atur <strong>provinsi &amp; kota domisilimu</strong> di Profil agar rekomendasi jurusan memprioritaskan kampus terdekat.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 text-[11px] font-bold h-auto"
-                onClick={() => { window.location.hash = '#/profil'; }}
-              >
-                Atur Lokasi
-              </Button>
-            </Card>
-          )}
 
           {recommendedProdi.length === 0 ? (
             <Card className="p-6 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
@@ -488,11 +442,6 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       <div className="min-w-0">
         <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{item.institution.name}</p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {item.institution.location && (
-            <span className="text-[11px] text-slate-400 flex items-center gap-1">
-              <MapPin className="w-3 h-3" /> {item.institution.location}
-            </span>
-          )}
           <Badge variant="outline" className="text-[9px] font-bold h-auto px-1.5 py-0.5">{item.institution.type}</Badge>
           {badge && (
             <Badge className={cn('text-[9px] font-bold h-auto px-1.5 py-0.5 border-0', badge.className)}>{badge.label}</Badge>
@@ -778,11 +727,6 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                         <div className="min-w-0">
                           <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{item.institution.name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            {item.institution.location && (
-                              <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                                <MapPin className="w-3 h-3" /> {item.institution.location}
-                              </span>
-                            )}
                             <Badge variant="outline" className="text-[9px] font-bold h-auto px-1.5 py-0.5">{item.institution.type}</Badge>
                             <JenjangBadge jenjang={item.major.jenjang} />
                           </div>
@@ -798,7 +742,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
             <div className="p-4 border-t border-slate-100 dark:border-border space-y-3">
               <p className="text-[11px] text-slate-400">
                 Target disimpan untuk jurusan <strong className="text-slate-600 dark:text-slate-300">{prodiName(selectedMajor.name)}</strong>
-                {selectedMajor.institution_name ? <> (kampus terdekat: {selectedMajor.institution_name})</> : null}.
+                {selectedMajor.institution_name ? <> (kampus: {selectedMajor.institution_name})</> : null}.
               </p>
               <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                 <Button

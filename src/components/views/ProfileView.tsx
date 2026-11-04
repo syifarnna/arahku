@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, Check, Lock, MapPin, Save, Shield, User } from 'lucide-react';
+import { Lock, Save } from 'lucide-react';
 import { appStore, useAppState } from '../../lib/store';
 import { ClusterType } from '../../types';
 import { cn } from '../../lib/utils';
@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { REGIONS } from '@/lib/regions';
 
 export const ProfileView: React.FC = () => {
   const state = useAppState();
@@ -19,18 +18,10 @@ export const ProfileView: React.FC = () => {
   const [phone, setPhone] = useState(state.profile.phone || '');
   const [school, setSchool] = useState(state.profile.school || '');
   const [interest, setInterest] = useState<ClusterType>(state.profile.major_interest || 'Saintek');
-  const [province, setProvince] = useState(state.profile.province || '');
-  const [city, setCity] = useState(state.profile.city || '');
   const [avatar, setAvatar] = useState(state.profile.avatar_url || '');
 
   const [pwd, setPwd] = useState('');
   const [saved, setSaved] = useState(false);
-
-  const provinceCities = REGIONS.find(r => r.name === province)?.cities ?? [];
-  const handleProvinceChange = (value: string) => {
-    setProvince(value);
-    setCity('');
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,8 +32,6 @@ export const ProfileView: React.FC = () => {
       phone,
       school,
       major_interest: interest,
-      province,
-      city,
       avatar_url: avatar,
       is_profile_complete: true
     });
@@ -134,34 +123,6 @@ export const ProfileView: React.FC = () => {
                 onChange={(e) => setSchool(e.target.value)}
                 className="h-auto px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-card border-slate-200 dark:border-border text-xs text-slate-800 dark:text-white focus:border-primary"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Provinsi Domisili</Label>
-              <Select value={province || undefined} onValueChange={handleProvinceChange}>
-                <SelectTrigger className="w-full h-auto px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-card border-slate-200 dark:border-border text-xs font-bold text-primary focus:border-primary">
-                  <SelectValue placeholder="Pilih provinsi..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {REGIONS.map(r => (
-                    <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Kota / Kabupaten Domisili</Label>
-              <Select value={city || undefined} onValueChange={setCity} disabled={!province}>
-                <SelectTrigger className="w-full h-auto px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-card border-slate-200 dark:border-border text-xs font-bold text-primary focus:border-primary disabled:opacity-50">
-                  <SelectValue placeholder={province ? 'Pilih kota/kabupaten...' : 'Pilih provinsi dulu...'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {provinceCities.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-1.5">

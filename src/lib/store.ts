@@ -22,7 +22,7 @@ import {
   INITIAL_RESULTS, 
   INITIAL_TRYOUTS 
 } from './mockData';
-import { supabase } from './supabaseClient';
+import { supabase, setSupabaseCredentials } from './supabaseClient';
 
 // Label predikat capaian UTBK dari total score (sumber nilai tunggal: utbk_scores).
 export function getUtbkPredicateLabel(totalScore: number): TryoutResult['predicate'] {
@@ -64,6 +64,8 @@ export interface AppState {
   targetMajorIds: number[]; 
   activeTargetMajorId: number | null; 
   useRealSupabase: boolean; // Keep for compatibility but it's always true now
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
   questions: PenjurusanQuestion[];
   tutoringCenters: TutoringCenter[];
 }
@@ -82,6 +84,8 @@ const DEFAULT_STATE: AppState = {
   targetMajorIds: [], 
   activeTargetMajorId: null, 
   useRealSupabase: true,
+  supabaseUrl: '',
+  supabaseAnonKey: '',
   questions: [],
   tutoringCenters: []
 };
@@ -639,7 +643,20 @@ class AppStore {
   }
 
   public setSupabaseCfg(url: string, key: string, enable: boolean) {
-    // Legacy method for compatibility with SupabaseSqlView component
+    const cleanUrl = url.trim();
+    const cleanKey = key.trim();
+
+    localStorage.setItem('supabase_url', cleanUrl);
+    localStorage.setItem('supabase_anon_key', cleanKey);
+
+    if (enable) {
+      setSupabaseCredentials(cleanUrl, cleanKey);
+    }
+
+    this.state.useRealSupabase = enable;
+    this.state.supabaseUrl = cleanUrl;
+    this.state.supabaseAnonKey = cleanKey;
+    this.notify();
   }
 
   public async forceSeedDemoData(): Promise<{ success: boolean; text: string }> {

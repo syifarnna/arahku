@@ -18,13 +18,24 @@ const getStoredKey = () => {
   try { return localStorage.getItem('supabase_anon_key') || ''; } catch { return ''; }
 };
 
-const supabaseUrl = cleanSupabaseUrl(getStoredUrl() || import.meta.env.VITE_SUPABASE_URL || '');
-const supabaseAnonKey = (getStoredKey() || import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder').trim();
+let supabaseUrl = cleanSupabaseUrl(getStoredUrl() || import.meta.env.VITE_SUPABASE_URL || '');
+let supabaseAnonKey = (getStoredKey() || import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder').trim();
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export let supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
   }
 });
+
+export const setSupabaseCredentials = (url: string, key: string) => {
+  supabaseUrl = cleanSupabaseUrl(url);
+  supabaseAnonKey = key.trim();
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    }
+  });
+};
 

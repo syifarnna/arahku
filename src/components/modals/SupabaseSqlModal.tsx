@@ -21,10 +21,19 @@ interface SupabaseSqlModalProps {
 export const SupabaseSqlModal: React.FC<SupabaseSqlModalProps> = ({ isOpen, onClose }) => {
   const state = useAppState();
   const [copied, setCopied] = useState(false);
-  const [url, setUrl] = useState((state as any).supabaseUrl || '');
-  const [key, setKey] = useState((state as any).supabaseAnonKey || '');
-  const [enable, setEnable] = useState((state as any).useRealSupabase || false);
+  const [url, setUrl] = useState((state as any).supabaseUrl || localStorage.getItem('supabase_url') || '');
+  const [key, setKey] = useState((state as any).supabaseAnonKey || localStorage.getItem('supabase_anon_key') || '');
+  const [enable, setEnable] = useState((state as any).useRealSupabase ?? true);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Sync form saat modal dibuka, agar nilai tersimpan dari browser/localStorage
+  // tidak tertinggal saat modal dibuka kembali.
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setUrl((state as any).supabaseUrl || localStorage.getItem('supabase_url') || '');
+    setKey((state as any).supabaseAnonKey || localStorage.getItem('supabase_anon_key') || '');
+    setEnable((state as any).useRealSupabase ?? true);
+  }, [isOpen]);
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(SUPABASE_SQL_BLUEPRINT);

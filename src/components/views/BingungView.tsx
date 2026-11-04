@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
 import { UtbkInputModal } from '@/components/modals/UtbkInputModal';
+import { displayProdiName, normalizeProdiKey } from '../../lib/prodiName';
 
 const CLUSTERS: ClusterType[] = ['Saintek', 'Soshum', 'Campuran'];
 
@@ -49,13 +50,10 @@ type Tally = Record<ClusterType, number>;
 
 const emptyTally = (): Tally => ({ Saintek: 0, Soshum: 0, Campuran: 0 });
 
-// Nama prodi di database berbentuk "NAMA PRODI - KAMPUS" (mis. "TEKNIK KIMIA - UPNYK").
-// Halaman penjurusan bersifat general, jadi cukup tampilkan nama jurusannya saja
-// (ambil bagian sebelum pemisah " - ").
-const prodiName = (fullName: string): string => {
-  const idx = fullName.indexOf(' - ');
-  return (idx > 0 ? fullName.slice(0, idx) : fullName).trim();
-};
+// Dataset PTN baru menyimpan nama prodi tanpa akhiran kampus, tapi masih ada
+// varian seperti "(PSDKU ...)" atau "ANIRY ACEH - ARSITEKTUR". Helper di
+// ../../lib/prodiName menormalkan nama agar pengelompokan & pencarian konsisten.
+const gradeOf = (major: Major): number => major.passing_grade_total || 0;
 
 interface MajorDescription {
   found: boolean;
@@ -142,9 +140,28 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     } catch { return null; }
   }, []);
 
-  const sortByGradeAsc = useCallback((a: Major, b: Major): number =>
-    (a.passing_grade_total || 0) - (b.passing_grade_total || 0),
+  const sortByGradeDesc = useCallback((a: Major, b: Major): number =>
+    gradeOf(b) - gradeOf(a),
   []);
+
+  // Cari semua kampus yang menawarkan prodi yang sama (berdasarkan kunci
+  // ternormalisasi), langsung dari master data yang sudah dimuat.
+  const collectCampuses = useCallback((major: Major): CampusEntry[] => {
+    const key = normalizeProdiKey(major.name);
+    if (!key) return [];
+    const instById = new Map(state.institutions.map(i => [i.id, i]));
+    return state.majors
+      .filter(m =>
+        normalizeProdiKey(m.name) === key &&
+        (!major.jenjang || !m.jenjang || m.jenjang === major.jenjang)
+      )
+      .map(m => {
+        const institution = instById.get(m.institution_id);
+        return institution ? { institution, major: m } : null;
+      })
+      .filter((x): x is CampusEntry => x != null)
+      .sort((a, b) => sortByGradeDesc(a.major, b.major));
+  }, [state.majors, state.institutions, sortByGradeDesc]);
 
   const start = () => {
     if (total === 0) return;
@@ -191,17 +208,29 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
         : m.cluster === dom
     );
     const map = new Map<string, { name: string; major: Major; campuses: Set<number> }>();
-    [...pool].sort(sortByGradeAsc).forEach(m => {
-      const key = prodiName(m.name);
+    // Urutkan PG tertinggi dulu supaya representatif grup = prodi PG tertinggi.
+    [...pool].sort(sortByGradeDesc).forEach(m => {
+      const baseKey = normalizeProdiKey(m.name);
+      if (!baseKey) return;
+      // Jenjang ikut jadi pembeda agar S1 & D-III prodi yang sama tidak tercampur.
+      const key = `${baseKey}||${m.jenjang || ''}`;
       const entry = map.get(key);
-      if (entry) entry.campuses.add(m.institution_id);
-      else map.set(key, { name: key, major: m, campuses: new Set([m.institution_id]) });
+      if (entry) {
+        entry.campuses.add(m.institution_id);
+        if (gradeOf(m) > gradeOf(entry.major)) entry.major = m;
+      } else {
+        map.set(key, {
+          name: displayProdiName(m.name),
+          major: m,
+          campuses: new Set([m.institution_id]),
+        });
+      }
     });
     return Array.from(map.values())
       .map(e => ({ name: e.name, major: e.major, campusCount: e.campuses.size }))
-      .sort((a, b) => sortByGradeAsc(a.major, b.major))
+      .sort((a, b) => sortByGradeDesc(a.major, b.major))
       .slice(0, 24);
-  }, [state.majors, phase, tally, lastResult, sortByGradeAsc]);
+  }, [state.majors, phase, tally, lastResult, sortByGradeDesc]);
 
   useEffect(() => {
     const reps = recommendedProdi.map(p => p.major);
@@ -213,7 +242,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       const m = reps.find(x => x.id === id);
       if (!m) return null;
       try {
-        const { data } = await supabase.rpc('get_major_description', { p_name: prodiName(m.name) });
+        const { data } = await supabase.rpc('get_major_description', { p_name: normalizeProdiKey(m.name) });
         return { id, desc: data as MajorDescription };
       } catch {
         return { id, desc: { found: false } as MajorDescription };
@@ -227,25 +256,41 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     return () => { cancelled = true; };
   }, [recommendedProdi, descCache]);
 
-  const openMajorDetail = async (major: Major) => {
-    setSelectedMajor(major);
-    setLoadingCampuses(true);
-    try {
-      const { data, error } = await supabase
-        .from('majors')
-        .select('*, institutions(id, name, type, grade, range_min, range_max)')
-        .ilike('name', `${prodiName(major.name)} - %`)
-        .order('passing_grade_total', { ascending: false })
-        .limit(100);
-      if (error || !data) {
-        setCampusesForMajor([]);
-        return;
-      }
-      const mapped = (data as any[]).map((row: any) => ({
+  // Fallback bila master data lokal belum memuat prodi ini: ambil majors dari
+  // server lalu saring dengan kunci yang sama (bukan pola "PRODI - %").
+  const fetchCampusesFromServer = useCallback(async (major: Major): Promise<CampusEntry[]> => {
+    const key = normalizeProdiKey(major.name);
+    if (!key) return [];
+    const { data, error } = await supabase
+      .from('majors')
+      .select('*, institutions(id, name, abbreviation, type, grade, range_min, range_max)')
+      .order('passing_grade_total', { ascending: false })
+      .limit(10000);
+    if (error || !data) return [];
+    return (data as any[])
+      .filter(row =>
+        normalizeProdiKey(row.name) === key &&
+        (!major.jenjang || !row.jenjang || row.jenjang === major.jenjang)
+      )
+      .map((row: any) => ({
         institution: row.institutions as Institution,
         major: { ...row, institution_name: row.institutions?.name, institution_type: row.institutions?.type } as Major,
-      })).filter(x => x.institution);
-      setCampusesForMajor(mapped);
+      }))
+      .filter(x => x.institution)
+      .sort((a, b) => sortByGradeDesc(a.major, b.major));
+  }, [sortByGradeDesc]);
+
+  const openMajorDetail = async (major: Major) => {
+    setSelectedMajor(major);
+    const local = collectCampuses(major);
+    if (local.length > 0) {
+      setCampusesForMajor(local);
+      setLoadingCampuses(false);
+      return;
+    }
+    setLoadingCampuses(true);
+    try {
+      setCampusesForMajor(await fetchCampusesFromServer(major));
     } catch {
       setCampusesForMajor([]);
     } finally {
@@ -255,24 +300,15 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
 
   const fetchCampusesForMajor = async (major: Major) => {
     setWizardStep('campus_categories');
+    const local = collectCampuses(major);
+    if (local.length > 0) {
+      setAllCampusesForPicked(local);
+      setLoadingCategories(false);
+      return;
+    }
     setLoadingCategories(true);
     try {
-      const { data, error } = await supabase
-        .from('majors')
-        .select('*, institutions(id, name, type, grade, range_min, range_max)')
-        .ilike('name', `${prodiName(major.name)} - %`)
-        .order('passing_grade_total', { ascending: false })
-        .limit(200);
-      if (error || !data) {
-        setAllCampusesForPicked([]);
-        return;
-      }
-      const mapped = (data as any[]).map((row: any) => ({
-        institution: row.institutions as Institution,
-        major: { ...row, institution_name: row.institutions?.name, institution_type: row.institutions?.type } as Major,
-      })).filter(x => x.institution);
-      mapped.sort((a, b) => (b.major.passing_grade_total || 0) - (a.major.passing_grade_total || 0));
-      setAllCampusesForPicked(mapped);
+      setAllCampusesForPicked(await fetchCampusesFromServer(major));
     } catch {
       setAllCampusesForPicked([]);
     } finally {
@@ -470,7 +506,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
         <TrendingUp className="w-12 h-12 mx-auto text-amber-500 mb-3" />
         <h3 className="font-extrabold text-lg text-slate-800 dark:text-white">Nilai Anda Belum Tersedia</h3>
         <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto leading-relaxed">
-          Untuk menampilkan kategori kampus <strong>Top</strong>, <strong>Pas</strong>, dan <strong>Aman</strong> bagi jurusan <strong>{pickedMajor?.name}</strong>, masukkan dulu nilai tryout UTBK Anda.
+          Untuk menampilkan kategori kampus <strong>Top</strong>, <strong>Pas</strong>, dan <strong>Aman</strong> bagi jurusan <strong>{displayProdiName(pickedMajor?.name)}</strong>, masukkan dulu nilai tryout UTBK Anda.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
           <Button onClick={() => setScoreModalOpen(true)} className="gap-2">
@@ -515,7 +551,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
               <ArrowLeft className="w-3.5 h-3.5" /> Kembali
             </Button>
             <div>
-              <h3 className="font-extrabold text-lg text-slate-800 dark:text-white">{prodiName(pickedMajor.name)}</h3>
+              <h3 className="font-extrabold text-lg text-slate-800 dark:text-white">{displayProdiName(pickedMajor.name)}</h3>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <Badge className={cn('rounded-md text-[10px] font-bold text-white border-0', s?.badge || 'bg-primary')}>{pickedMajor.cluster}</Badge>
                 <JenjangBadge jenjang={pickedMajor.jenjang} />
@@ -678,7 +714,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
             <div className="p-6 border-b border-slate-100 dark:border-border flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                  <h3 className="font-extrabold text-lg text-slate-800 dark:text-white">{prodiName(selectedMajor.name)}</h3>
+                  <h3 className="font-extrabold text-lg text-slate-800 dark:text-white">{displayProdiName(selectedMajor.name)}</h3>
                   <Badge className={cn('rounded-md text-[10px] font-bold text-white border-0', clusterStyle[selectedMajor.cluster as ClusterType]?.badge || 'bg-primary')}>
                     {selectedMajor.cluster}
                   </Badge>
@@ -741,7 +777,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
 
             <div className="p-4 border-t border-slate-100 dark:border-border space-y-3">
               <p className="text-[11px] text-slate-400">
-                Target disimpan untuk jurusan <strong className="text-slate-600 dark:text-slate-300">{prodiName(selectedMajor.name)}</strong>
+                Target disimpan untuk jurusan <strong className="text-slate-600 dark:text-slate-300">{displayProdiName(selectedMajor.name)}</strong>
                 {selectedMajor.institution_name ? <> (kampus: {selectedMajor.institution_name})</> : null}.
               </p>
               <div className="flex flex-col sm:flex-row sm:justify-end gap-2">

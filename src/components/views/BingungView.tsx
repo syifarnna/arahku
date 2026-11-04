@@ -94,7 +94,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
 
   const current = deck[step];
 
-  const autoScore = appStore.getUtbkLatestScore();
+  const autoScore = appStore.getUtbkLatestScore() ?? state.results[0]?.total_score ?? null;
 
   const showToast = (icon: 'success' | 'error', title: string) => {
     Swal.fire({
@@ -335,7 +335,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       fetchCampusesForMajor(pickedMajor);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoScore, wizardStep]);
+  }, [autoScore, wizardStep, pickedMajor]);
 
   const categorized = useMemo(() => {
     if (autoScore == null || allCampusesForPicked.length === 0) return { top: [] as CampusEntry[], pas: [] as CampusEntry[], aman: [] as CampusEntry[] };

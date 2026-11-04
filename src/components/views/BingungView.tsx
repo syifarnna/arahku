@@ -228,8 +228,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     });
     return Array.from(map.values())
       .map(e => ({ name: e.name, major: e.major, campusCount: e.campuses.size }))
-      .sort((a, b) => sortByGradeDesc(a.major, b.major))
-      .slice(0, 24);
+      .sort((a, b) => sortByGradeDesc(a.major, b.major));
   }, [state.majors, phase, tally, lastResult, sortByGradeDesc]);
 
   useEffect(() => {

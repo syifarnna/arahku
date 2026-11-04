@@ -151,10 +151,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     if (!key) return [];
     const instById = new Map(state.institutions.map(i => [i.id, i]));
     return state.majors
-      .filter(m =>
-        normalizeProdiKey(m.name) === key &&
-        (!major.jenjang || !m.jenjang || m.jenjang === major.jenjang)
-      )
+      .filter(m => normalizeProdiKey(m.name) === key)
       .map(m => {
         const institution = instById.get(m.institution_id);
         return institution ? { institution, major: m } : null;
@@ -212,8 +209,9 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     [...pool].sort(sortByGradeDesc).forEach(m => {
       const baseKey = normalizeProdiKey(m.name);
       if (!baseKey) return;
-      // Jenjang ikut jadi pembeda agar S1 & D-III prodi yang sama tidak tercampur.
-      const key = `${baseKey}||${m.jenjang || ''}`;
+      // Dikelompokkan per nama prodi saja (tanpa memisah jenjang), agar semua
+      // kampus dengan prodi yang sama tergabung dalam satu grup.
+      const key = baseKey;
       const entry = map.get(key);
       if (entry) {
         entry.campuses.add(m.institution_id);
@@ -267,10 +265,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       .limit(10000);
     if (error || !data) return [];
     return (data as any[])
-      .filter(row =>
-        normalizeProdiKey(row.name) === key &&
-        (!major.jenjang || !row.jenjang || row.jenjang === major.jenjang)
-      )
+      .filter(row => normalizeProdiKey(row.name) === key)
       .map((row: any) => ({
         institution: row.institutions as Institution,
         major: { ...row, institution_name: row.institutions?.name, institution_type: row.institutions?.type } as Major,
@@ -456,7 +451,6 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                         <Badge className={cn('rounded-md text-[10px] font-bold text-white border-0', clusterStyle[p.major.cluster as ClusterType]?.badge || 'bg-primary')}>
                           {p.major.cluster}
                         </Badge>
-                        <JenjangBadge jenjang={p.major.jenjang} />
                         <span className="text-[10px] font-bold text-slate-400">{p.campusCount} kampus</span>
                       </div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-white mt-1.5 truncate">{p.name}</h4>

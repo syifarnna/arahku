@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
 import { UtbkInputModal } from '@/components/modals/UtbkInputModal';
-import { displayProdiName, normalizeProdiKey } from '../../lib/prodiName';
+import { displayProdiName, normalizeProdiKey, prodiLookupKeys } from '../../lib/prodiName';
 import { fetchAllRows } from '../../lib/supabasePaging';
 
 const CLUSTERS: ClusterType[] = ['Saintek', 'Soshum', 'Campuran'];
@@ -291,8 +291,15 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       const m = reps.find(x => x.id === id);
       if (!m) return null;
       try {
-        const { data } = await supabase.rpc('get_major_description', { p_name: normalizeProdiKey(m.name) });
-        return { id, desc: data as MajorDescription };
+        let desc: MajorDescription = { found: false } as MajorDescription;
+        for (const lookup of prodiLookupKeys(m.name)) {
+          const { data } = await supabase.rpc('get_major_description', { p_name: lookup });
+          if (data && (data as MajorDescription).found) {
+            desc = data as MajorDescription;
+            break;
+          }
+        }
+        return { id, desc };
       } catch {
         return { id, desc: { found: false } as MajorDescription };
       }
@@ -536,8 +543,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                           </div>
                           <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug line-clamp-2">{p.name}</h4>
                         </div>
-                        <div className="flex w-full items-center justify-between gap-2">
-                          <span className="truncate text-[10px] font-semibold text-slate-400">{p.major.institution_name || 'Lihat kampus'}</span>
+                        <div className="flex w-full items-center justify-end gap-2">
                           <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 group-hover:text-primary transition-colors" />
                         </div>
                       </button>

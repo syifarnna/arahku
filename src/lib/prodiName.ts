@@ -17,10 +17,11 @@ const CAMPUS_PART_RE =
 // Anotasi dalam kurung yang bukan bagian nama prodi:
 // jenjang (D-III/D-IV/S1), cabang (KAMPUS/PSDKU/UT), dan varian (NK/PGSD/PGPAUD).
 const isStrippableAnnotation = (inner: string): boolean =>
+  /\b(KAMPUS|PSDKU|UPBJJ)\b/i.test(inner) ||
   /^(KAMPUS|PSDKU|UPBJJ|UT)\b/i.test(inner) ||
   /^D-?(III|IV)$/i.test(inner) ||
   /^S[123]$/i.test(inner) ||
-  /^(NK|PGSD|PGPAUD)$/i.test(inner);
+  /^(NK|PGSD|PG\s?-?PAUD)$/i.test(inner);
 
 const stripAnnotations = (value: string): string => {
   let s = value.replace(/\s+/g, ' ').trim();
@@ -86,21 +87,150 @@ const normalizeBase = (name?: string | null): string => {
   return s.replace(/\s+/g, ' ').trim();
 };
 
-// Kunci pengelompokan: uppercase, tanpa tanda baca.
-export function normalizeProdiKey(name?: string | null): string {
-  return normalizeBase(name)
+// Kunci mentah: uppercase, tanpa tanda baca. Dipakai sebelum alias diterapkan.
+const rawProdiKey = (name?: string | null): string =>
+  normalizeBase(name)
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, ' ')
     .trim();
-}
 
-// Nama tampilan: Title Case dari nama yang sudah dibersihkan.
-export function displayProdiName(name?: string | null): string {
-  const base = normalizeBase(name);
-  if (!base) return '';
-  return base
+// Gabungkan nama prodi yang sebenarnya merujuk ke program studi yang sama.
+// Sengaja memakai daftar alias eksplisit (bukan fuzzy matching) agar prodi yang
+// mirip tetapi berbeda — mis. "Pendidikan Matematika" vs "Matematika", atau
+// "Kedokteran" vs "Kedokteran Gigi" — tidak ikut tergabung.
+type AliasGroup = { canonical: string; variants: string[] };
+
+const ALIAS_GROUPS: AliasGroup[] = [
+  {
+    canonical: 'Ilmu Hukum',
+    variants: ['HUKUM', 'IL. HUKUM', 'ILMU HUKUM (IH)'],
+  },
+  {
+    canonical: 'Pendidikan Guru Sekolah Dasar',
+    variants: ['PGSD', 'PGSD (PENDIDIKAN GURU SEKOLAH DASAR)'],
+  },
+  {
+    canonical: 'Pendidikan Guru PAUD',
+    variants: [
+      'PAUD',
+      'PG PAUD',
+      'PGPAUD',
+      'PENDIDIKAN GURU PENDIDIKAN ANAK USIA DINI',
+      'PENDIDIKAN ANAK USIA DINI',
+    ],
+  },
+  {
+    canonical: 'Ilmu Gizi',
+    variants: ['GIZI'],
+  },
+  {
+    canonical: 'Kedokteran',
+    variants: ['PEND. KEDOKTERAN', 'KEDOKTERAN (FIKKIA BANYUWANGI)'],
+  },
+  {
+    canonical: 'Ilmu Administrasi Negara',
+    variants: [
+      'ADM. NEGARA',
+      'IL. ADM. NEGARA',
+      'ILMU ADM NEGARA',
+      'ILMU ADM. NEGARA',
+      'ADMINISTRASI NEGARA',
+    ],
+  },
+  {
+    canonical: 'Ilmu Administrasi Niaga/Bisnis',
+    variants: [
+      'ILMU ADM.NIAGA',
+      'ILMU ADM. NIAGA/BISNIS',
+      'ILMU ADMINISTRASI NIAGA',
+      'ILMU ADMINISTRASI BISNIS',
+    ],
+  },
+  {
+    canonical: 'Desain Komunikasi Visual',
+    variants: ['DESAIN DAN KOMUNIKASI VISUAL'],
+  },
+  {
+    canonical: 'Pendidikan Teknik Informatika dan Komputer',
+    variants: [
+      'PENDIDIKAN TEKNIK INFORMATIKA',
+      'PENDIDIKAN TEKNIK INFORMATIKA & KOMPUTER',
+      'PENDIDIKAN TEKNOLOGI INFORMATIKA DAN KOMPUTER',
+    ],
+  },
+  {
+    canonical: 'Teknik Informatika',
+    variants: [
+      'INFORMATIKA',
+      'PSDKU TEKNIK INFORMATIKA KAB. NGANJUK (D-IV)',
+      'PSDKU TEKNIK INFORMATIKA KAB. SIDOARJO (D-IV)',
+    ],
+  },
+  {
+    canonical: 'Manajemen',
+    variants: ['MANAJEMEN BISNIS'],
+  },
+  {
+    canonical: 'Ilmu Komunikasi',
+    variants: ['SAINS KOMUNIKASI'],
+  },
+  {
+    canonical: 'Ilmu Perpustakaan',
+    variants: ['ILMU INFORMASI DAN PERPUSTAKAAN', 'ILMU PERPUSTAKAAN (IP)'],
+  },
+];
+
+const ALIAS_BY_KEY = new Map<string, { key: string; label: string }>();
+ALIAS_GROUPS.forEach((group) => {
+  const key = rawProdiKey(group.canonical);
+  ALIAS_BY_KEY.set(key, { key, label: group.canonical });
+  group.variants.forEach((variant) => {
+    ALIAS_BY_KEY.set(rawProdiKey(variant), { key, label: group.canonical });
+  });
+});
+
+// Singkatan yang harus tetap uppercase saat ditampilkan.
+const TITLE_CASE_ACRONYMS = new Set([
+  'PG', 'PGSD', 'PGPAUD', 'PAUD', 'DKV', 'NK', 'IH', 'IP', 'UT',
+  'S1', 'S2', 'S3', 'III', 'IV',
+]);
+
+const toTitleCase = (value: string): string =>
+  value
     .toLowerCase()
     .split(' ')
-    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : ''))
+    .map((word) => {
+      if (!word) return '';
+      return word
+        .split('-')
+        .map((part) => {
+          if (!part) return '';
+          const upper = part.toUpperCase();
+          if (TITLE_CASE_ACRONYMS.has(upper)) return upper;
+          return part[0].toUpperCase() + part.slice(1);
+        })
+        .join('-');
+    })
     .join(' ');
+
+// Kunci pengelompokan: uppercase, tanpa tanda baca, sudah dipetakan ke nama kanonik.
+export function normalizeProdiKey(name?: string | null): string {
+  const key = rawProdiKey(name);
+  return ALIAS_BY_KEY.get(key)?.key ?? key;
+}
+
+// Nama tampilan: label kanonik bila prodi termasuk grup alias, selain itu
+// Title Case dari nama yang sudah dibersihkan.
+export function displayProdiName(name?: string | null): string {
+  const alias = ALIAS_BY_KEY.get(rawProdiKey(name));
+  if (alias) return alias.label;
+  return toTitleCase(normalizeBase(name));
+}
+
+// Kunci untuk lookup ke database: coba kunci kanonik lebih dulu, lalu kunci
+// mentah agar deskripsi prodi varian lama tetap ditemukan.
+export function prodiLookupKeys(name?: string | null): string[] {
+  const canonical = normalizeProdiKey(name);
+  const raw = rawProdiKey(name);
+  return Array.from(new Set([canonical, raw])).filter(Boolean);
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import { BookOpen, Brain, Briefcase, Building2, CheckCircle2, ChevronRight, Compass, HelpCircle, Loader2, RotateCcw, Save, Sparkles, Target, Trash2, X, TrendingUp, Award, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
+import { BookOpen, Brain, Briefcase, Building2, CheckCircle2, ChevronRight, Compass, HelpCircle, Loader2, RotateCcw, Save, Search, Sparkles, Target, Trash2, X, TrendingUp, Award, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { appStore, useAppState } from '../../lib/store';
 import { supabase } from '../../lib/supabaseClient';
@@ -14,6 +14,9 @@ import { displayProdiName, normalizeProdiKey } from '../../lib/prodiName';
 import { fetchAllRows } from '../../lib/supabasePaging';
 
 const CLUSTERS: ClusterType[] = ['Saintek', 'Soshum', 'Campuran'];
+
+// Jumlah kartu prodi yang ditampilkan per batch pada grid rekomendasi.
+const PRODI_BATCH = 24;
 
 const OPTION_KEYS = ['a', 'b', 'c', 'd'] as const;
 
@@ -101,6 +104,8 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
   const [allCampusesForPicked, setAllCampusesForPicked] = useState<CampusEntry[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
+  const [prodiQuery, setProdiQuery] = useState('');
+  const [visibleProdiCount, setVisibleProdiCount] = useState(PRODI_BATCH);
 
   const questions = useMemo(() => state.questions.filter(q => q.is_active), [state.questions]);
 
@@ -256,8 +261,28 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       });
   }, [state.majors, state.institutions, phase, tally, lastResult, sortByGradeDesc]);
 
+  const filteredRecommendedProdi = useMemo(() => {
+    const q = prodiQuery.trim().toLowerCase();
+    if (!q) return recommendedProdi;
+    return recommendedProdi.filter(p => p.name.toLowerCase().includes(q));
+  }, [recommendedProdi, prodiQuery]);
+
+  const visibleRecommendedProdi = useMemo(
+    () => filteredRecommendedProdi.slice(0, visibleProdiCount),
+    [filteredRecommendedProdi, visibleProdiCount],
+  );
+
+  const remainingProdiCount = filteredRecommendedProdi.length - visibleRecommendedProdi.length;
+
+  // Kembali ke batch pertama saat hasil tes berubah atau pencarian diubah.
   useEffect(() => {
-    const reps = recommendedProdi.map(p => p.major);
+    setVisibleProdiCount(PRODI_BATCH);
+  }, [phase, tally, lastResult, prodiQuery]);
+
+  useEffect(() => {
+    // Cukup prefetch deskripsi untuk kartu yang sedang tampil agar tidak
+    // memanggil RPC ribuan kali sekaligus saat hasil tes dirender.
+    const reps = visibleRecommendedProdi.map(p => p.major);
     if (reps.length === 0) return;
     const idsToFetch = reps.filter(m => !descCache[m.id]).map(m => m.id);
     if (idsToFetch.length === 0) return;
@@ -278,7 +303,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       setDescCache(next);
     });
     return () => { cancelled = true; };
-  }, [recommendedProdi, descCache]);
+  }, [visibleRecommendedProdi, descCache]);
 
   // Fallback bila master data lokal belum memuat prodi ini: ambil majors dari
   // server lalu saring dengan kunci yang sama (bukan pola "PRODI - %").
@@ -462,6 +487,11 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
               <Sparkles className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-base text-slate-800 dark:text-white">Rekomendasi Jurusan untuk Anda ({s.label})</h3>
             </div>
+            {filteredRecommendedProdi.length > 0 && (
+              <Badge variant="secondary" className="rounded-full text-[10px] font-bold h-auto px-2.5 py-1">
+                {filteredRecommendedProdi.length} prodi
+              </Badge>
+            )}
           </div>
 
           {recommendedProdi.length === 0 ? (
@@ -469,28 +499,65 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
               <p className="text-sm text-slate-500">Belum ada jurusan untuk rumpun ini.</p>
             </Card>
           ) : (
-            <div className="rounded-2xl border border-slate-100 dark:border-border bg-card overflow-hidden">
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {recommendedProdi.map(p => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => openMajorDetail(p.major)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge className={cn('rounded-md text-[10px] font-bold text-white border-0', clusterStyle[p.major.cluster as ClusterType]?.badge || 'bg-primary')}>
-                          {p.major.cluster}
-                        </Badge>
-                        <span className="text-[10px] font-bold text-slate-400">{p.campusCount} kampus</span>
-                      </div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-white mt-1.5 truncate">{p.name}</h4>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
-                  </button>
-                ))}
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="search"
+                  value={prodiQuery}
+                  onChange={(e) => setProdiQuery(e.target.value)}
+                  placeholder="Cari prodi..."
+                  className="w-full rounded-xl border border-slate-200 dark:border-border bg-card pl-9 pr-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-primary"
+                />
               </div>
+
+              {filteredRecommendedProdi.length === 0 ? (
+                <Card className="p-6 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
+                  <p className="text-sm text-slate-500">Prodi "{prodiQuery}" tidak ditemukan.</p>
+                </Card>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {visibleRecommendedProdi.map(p => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => openMajorDetail(p.major)}
+                        className="group flex min-h-[128px] flex-col justify-between gap-4 rounded-2xl border border-slate-100 dark:border-border bg-card p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md cursor-pointer"
+                      >
+                        <div className="min-w-0 w-full space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge className={cn('rounded-md text-[10px] font-bold text-white border-0', clusterStyle[p.major.cluster as ClusterType]?.badge || 'bg-primary')}>
+                              {p.major.cluster}
+                            </Badge>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                              <Building2 className="w-3 h-3" /> {p.campusCount} kampus
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug line-clamp-2">{p.name}</h4>
+                        </div>
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className="truncate text-[10px] font-semibold text-slate-400">{p.major.institution_name || 'Lihat kampus'}</span>
+                          <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 group-hover:text-primary transition-colors" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {remainingProdiCount > 0 && (
+                    <div className="flex justify-center">
+                      <Button
+                        variant="outline"
+                        onClick={() => setVisibleProdiCount(c => c + PRODI_BATCH)}
+                        className="gap-2"
+                      >
+                        Tampilkan {Math.min(PRODI_BATCH, remainingProdiCount)} Prodi Berikutnya
+                        <span className="text-[11px] font-semibold text-slate-400">({remainingProdiCount} tersisa)</span>
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

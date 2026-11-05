@@ -23,6 +23,7 @@ import {
   INITIAL_TRYOUTS 
 } from './mockData';
 import { supabase, setSupabaseCredentials } from './supabaseClient';
+import { dedupeByKey, fetchAllRows } from './supabasePaging';
 
 // Label predikat capaian UTBK dari total score (sumber nilai tunggal: utbk_scores).
 export function getUtbkPredicateLabel(totalScore: number): TryoutResult['predicate'] {
@@ -663,28 +664,85 @@ class AppStore {
      return { success: false, text: "Silakan seed menggunakan SQL Blueprint di dashboard Supabase." };
   }
   
+  // Ganti seluruh daftar prodi di state, sekaligus:
+  //  1) membuang duplikat berdasarkan `code` (id terkecil dipertahankan, sama
+  //     seperti cleanup SQL), dan
+  //  2) memetakan ulang target prodi yang menunjuk ke id duplikat agar tidak
+  //     hilang setelah dedupe.
+  private applyMajors(rows: Major[]) {
+    const previousById = new Map(this.state.majors.map(m => [m.id, m]));
+    const kept: Major[] = [];
+    const keptIdByCode = new Map<string, number>();
+    const droppedCodeById = new Map<number, string>();
+
+    for (const row of rows) {
+      const code = (row.code || '').trim();
+      if (!code) {
+        kept.push(row);
+        continue;
+      }
+      if (keptIdByCode.has(code)) {
+        droppedCodeById.set(row.id, code);
+        continue;
+      }
+      keptIdByCode.set(code, row.id);
+      kept.push(row);
+    }
+
+    this.state.majors = kept;
+
+    if (this.state.targetMajorIds.length > 0) {
+      const present = new Set(kept.map(m => m.id));
+      const remapped = this.state.targetMajorIds.map(id => {
+        if (present.has(id)) return id;
+        const code =
+          droppedCodeById.get(id) ||
+          ((previousById.get(id)?.code || '').trim() || undefined);
+        if (!code) return id;
+        return keptIdByCode.get(code) ?? id;
+      });
+      this.state.targetMajorIds = Array.from(new Set(remapped));
+      if (
+        this.state.activeTargetMajorId != null &&
+        !this.state.targetMajorIds.includes(this.state.activeTargetMajorId)
+      ) {
+        this.state.activeTargetMajorId = this.state.targetMajorIds[0] ?? null;
+      }
+    }
+  }
+
   public async fetchMasterData() {
     try {
       const { data: tryoutsData } = await supabase.from('tryouts').select('*').order('id', { ascending: false });
       if (tryoutsData && tryoutsData.length > 0) this.state.tryouts = tryoutsData;
 
-      const { data: instData } = await supabase.from('institutions').select('*').order('name', { ascending: true }).limit(5000);
-      if (instData && instData.length > 0) this.state.institutions = instData;
+      const instRes = await fetchAllRows<Institution>(() =>
+        supabase.from('institutions').select('*').order('id', { ascending: true }) as any,
+      );
+      const instData = dedupeByKey(instRes.data, (row) => String(row.id));
+      if (instData.length > 0) this.state.institutions = instData;
 
-      const { data: majorsData, error: majorsErr } = await supabase.from('majors').select('*, institutions(name, type)').order('id', { ascending: false }).limit(10000);
-      if (majorsErr) {
-        console.warn('Error fetching majors master:', majorsErr);
+      const majorsRes = await fetchAllRows<any>(() =>
+        supabase
+          .from('majors')
+          .select('*, institutions(name, type)')
+          .order('id', { ascending: true }) as any,
+      );
+      let majorsData = majorsRes.data;
+      if (majorsRes.error) {
+        console.warn('Error fetching majors master:', majorsRes.error);
         // Fallback to simple select without join
-        const { data: fallbackMajors } = await supabase.from('majors').select('*').order('id', { ascending: false }).limit(10000);
-        if (fallbackMajors && fallbackMajors.length > 0) {
-          this.state.majors = fallbackMajors;
-        }
-      } else if (majorsData && majorsData.length > 0) {
-        this.state.majors = majorsData.map((m: any) => ({
+        const fallback = await fetchAllRows<any>(() =>
+          supabase.from('majors').select('*').order('id', { ascending: true }) as any,
+        );
+        majorsData = fallback.data;
+      }
+      if (majorsData.length > 0) {
+        this.applyMajors(majorsData.map((m: any) => ({
           ...m,
           institution_name: m.institutions?.name,
-          institution_type: m.institutions?.type
-        }));
+          institution_type: m.institutions?.type,
+        })));
       }
 
       const { data: questionsData } = await supabase.from('penjurusan_questions').select('*').order('id', { ascending: true });
@@ -773,21 +831,27 @@ class AppStore {
     const missingIds = ids.filter(id => !this.state.majors.some(m => m.id === id));
     if (missingIds.length === 0) return;
     try {
-      const { data, error } = await supabase
-        .from('majors')
-        .select('*, institutions(name, type)')
-        .in('id', missingIds)
-        .limit(500);
+      const { data, error } = await fetchAllRows<any>(() =>
+        supabase
+          .from('majors')
+          .select('*, institutions(name, type)')
+          .in('id', missingIds)
+          .order('id', { ascending: true }) as any,
+        { maxRows: 5000 },
+      );
       if (error) {
         console.warn('Gagal menyelesaikan prodi target dari Supabase:', error.message);
         return;
       }
-      if (!data || data.length === 0) return;
-      const mapped: Major[] = data.map((m: any) => ({
-        ...m,
-        institution_name: m.institutions?.name,
-        institution_type: m.institutions?.type,
-      }));
+      if (data.length === 0) return;
+      const mapped: Major[] = dedupeByKey(
+        data.map((m: any) => ({
+          ...m,
+          institution_name: m.institutions?.name,
+          institution_type: m.institutions?.type,
+        })),
+        (m) => m.code || String(m.id),
+      );
       const known = new Set(this.state.majors.map(x => x.id));
       const merged = mapped.filter(x => !known.has(x.id));
       if (merged.length > 0) {
@@ -880,30 +944,36 @@ class AppStore {
   // Mengembalikan daftar prodi lengkap kampus tsb & menggabungkannya ke state global (dedup).
   public async loadMajorsForInstitution(institutionId: number): Promise<Major[]> {
     try {
-      const { data, error } = await supabase
-        .from('majors')
-        .select('*, institutions(name, type)')
-        .eq('institution_id', institutionId)
-        .order('passing_grade_total', { ascending: true, nullsFirst: true })
-        .limit(2000);
+      const { data, error } = await fetchAllRows<any>(() =>
+        supabase
+          .from('majors')
+          .select('*, institutions(name, type)')
+          .eq('institution_id', institutionId)
+          .order('id', { ascending: true }) as any,
+      );
       if (error) {
         console.warn('Gagal memuat prodi kampus:', error.message);
         return this.state.majors.filter(m => m.institution_id === institutionId);
       }
       const existing = this.state.majors.filter(m => m.institution_id === institutionId);
-      if (!data || data.length === 0) return existing;
-      const mapped: Major[] = data.map((m: any) => ({
-        ...m,
-        institution_name: m.institutions?.name,
-        institution_type: m.institutions?.type,
-      }));
+      if (data.length === 0) return existing;
+      const mapped: Major[] = dedupeByKey(
+        data.map((m: any) => ({
+          ...m,
+          institution_name: m.institutions?.name,
+          institution_type: m.institutions?.type,
+        })),
+        (m) => m.code || String(m.id),
+      );
       const known = new Set(this.state.majors.map(x => x.id));
       const merged = mapped.filter(x => !known.has(x.id));
       if (merged.length > 0) {
         this.state.majors = [...this.state.majors, ...merged];
         this.notify();
       }
-      return mapped;
+      return [...mapped].sort(
+        (a, b) => (a.passing_grade_total || 0) - (b.passing_grade_total || 0),
+      );
     } catch (err) {
       console.warn('Gagal memuat prodi kampus:', err);
       return this.state.majors.filter(m => m.institution_id === institutionId);

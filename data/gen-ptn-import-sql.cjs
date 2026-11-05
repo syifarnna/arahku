@@ -106,12 +106,23 @@ const num = (v, dp = 2) => {
 
 // ---------- 4. Build ----------
 const rows = parseRows();
-const sortedUnivs = [...new Set(rows.map(r => (r.nm_univ || '').trim()).filter(Boolean))].sort();
+
+// Rapikan nama kampus yang tidak lengkap di sumber.
+function displayUnivName(name) {
+  const clean = String(name || '').replace(/\s+/g, ' ').trim();
+  if (/^UIN\s+AR([\s-]*RANIRY)?$/i.test(clean)) {
+    return 'UNIVERSITAS ISLAM NEGERI AR-RANIRY';
+  }
+  return clean;
+}
+
+const rowUnivName = (r) => displayUnivName(r.nm_univ);
+const sortedUnivs = [...new Set(rows.map(rowUnivName).filter(Boolean))].sort();
 const univId = new Map(sortedUnivs.map((u, i) => [u, i + 1]));
 
 const instLines = sortedUnivs.map((u) => {
   // singkatan PTN: ambil dari kolom `ptn` yang paling sering muncul di prodi kampus ini
-  const abbrs = rows.filter(r => (r.nm_univ || '').trim() === u).map(r => (r.ptn || '').trim()).filter(Boolean);
+  const abbrs = rows.filter(r => rowUnivName(r) === u).map(r => (r.ptn || '').trim()).filter(Boolean);
   const abbr = abbrs.length ? abbrs.sort((a, b) => abbrs.filter(x => x === b).length - abbrs.filter(x => x === a).length)[0] : '';
   const abbrLit = abbr || 'PTN';
   return `    (${univId.get(u)}, ${q(u)}, ${q(abbrLit)}, 'PTN', NULL)`;
@@ -119,7 +130,7 @@ const instLines = sortedUnivs.map((u) => {
 
 const majorInserts = [];
 for (const r of rows) {
-  const nm = (r.nm_univ || '').trim();
+  const nm = rowUnivName(r);
   const jur = (r.jurusan || '').trim();
   const instId = univId.get(nm);
   const pm = jur.match(/\(([^)]+)\)\s*$/);
@@ -134,7 +145,9 @@ for (const r of rows) {
     cluster: classifyCluster(jur),
     jenjang: ['S1', 'D-III', 'D-IV'].includes(jenjang.toUpperCase()) ? jenjang.toUpperCase() : 'S1',
     daya_tampung: r.tampung ? parseInt(r.tampung, 10) : null,
-    peminat: r.maks ? parseInt(r.maks, 10) : null,
+    // Sumber hanya punya `nilai`; `maks` bukan jumlah peminat. Biarkan NULL
+    // agar rekomendasi memakai tie-break grade kampus lalu PG.
+    peminat: null,
     passing_grade_total: isNaN(pg) ? null : Math.round(pg * 100) / 100,
     passing_grade_percentage: pct,
     year: 2026,
@@ -146,9 +159,32 @@ const majorsChunks = [];
 const CH = 500;
 for (let i = 0; i < majorsValues.length; i += CH) majorsChunks.push(majorsValues.slice(i, i + CH).join(',\n'));
 
+const MAJORS_COLUMNS = 'institution_id, code, name, cluster, jenjang, daya_tampung, peminat, passing_grade_total, passing_grade_percentage, year';
+// Impor ulang harus meng-update baris dengan `code` yang sama (bukan menambah
+// salinan baru). Id baris lama dipertahankan agar target user tetap valid.
+const MAJOR_CONFLICT = `ON CONFLICT (code) DO UPDATE SET
+  institution_id = EXCLUDED.institution_id,
+  name = EXCLUDED.name,
+  cluster = EXCLUDED.cluster,
+  jenjang = EXCLUDED.jenjang,
+  daya_tampung = EXCLUDED.daya_tampung,
+  peminat = EXCLUDED.peminat,
+  passing_grade_total = EXCLUDED.passing_grade_total,
+  passing_grade_percentage = EXCLUDED.passing_grade_percentage,
+  year = EXCLUDED.year`;
+const INSTITUTION_CONFLICT = `ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  abbreviation = EXCLUDED.abbreviation,
+  type = EXCLUDED.type,
+  location = EXCLUDED.location`;
+
 const schema = `-- =========================================================================
 -- MIGRASI DATA PTN TERBARU (SOURCE: data/dataptn_mediascanter.sql)
 -- Dump Navicat: tabel ptn (DB LIVE BE) - 5150 baris, 146 universitas, 1439 prodi
+--
+-- PERINGATAN: script ini RESET PENUH (target_institutions ikut dikosongkan).
+-- Untuk merapikan database yang sudah berisi duplikat TANPA menghapus target
+-- user, gunakan data/fix_ptn_database.sql.
 -- =========================================================================
 
 -- 1) Backup data lama
@@ -173,43 +209,60 @@ TRUNCATE TABLE target_institutions, majors, institutions CASCADE;
 ALTER SEQUENCE institutions_id_seq RESTART WITH 1;
 ALTER SEQUENCE majors_id_seq RESTART WITH 1;
 
+-- Indeks unik dibutuhkan oleh ON CONFLICT (code) di bawah.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_majors_code ON majors (code) WHERE code IS NOT NULL;
+
 -- 4) INSERT UNIVERSITAS
 INSERT INTO institutions (id, name, abbreviation, type, location) VALUES
-${instLines.join(',\n')};
+${instLines.join(',\n')}
+${INSTITUTION_CONFLICT};
 
 -- 5) INSERT PRODI
 -- passing_grade_total            = nilai (skor passing dari dump)
 -- passing_grade_percentage       = passing_grade_total / 10
 -- cluster                         = hasil klasifikasi rumpun (Saintek/Soshum/Campuran) dari nama prodi
 -- jenjang                         = dari akhiran (D-IV)/(D-III) pada nama prodi, default S1
-${majorsChunks.map((c, i) => `-- Chunk ${i + 1}\nINSERT INTO majors (institution_id, code, name, cluster, jenjang, daya_tampung, peminat, passing_grade_total, passing_grade_percentage, year) VALUES\n${c};`).join('\n\n')}
+-- peminat                         = NULL (sumber tidak menyediakan jumlah peminat)
+${majorsChunks.map((c, i) => `-- Chunk ${i + 1}\nINSERT INTO majors (${MAJORS_COLUMNS}) VALUES\n${c}\n${MAJOR_CONFLICT};`).join('\n\n')}
+
+-- Indeks pencarian & optimisasi
+CREATE UNIQUE INDEX IF NOT EXISTS ux_majors_code ON majors (code) WHERE code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_majors_institution ON majors(institution_id);
+CREATE INDEX IF NOT EXISTS idx_majors_jenjang ON majors(jenjang);
+CREATE INDEX IF NOT EXISTS idx_majors_name_trgm ON majors USING gin (name gin_trgm_ops);
 `;
 
 const institutionsSql = `-- =========================================================================
--- DATA PTN TERBARU: INSERT UNIVERSITAS
+-- DATA PTN TERBARU: INSERT UNIVERSITAS (idempotent, aman dijalankan ulang)
 -- Sumber: data/dataptn_mediascanter.sql (dump tabel ptn)
 -- Total: ${sortedUnivs.length} universitas
 -- =========================================================================
 INSERT INTO institutions (id, name, abbreviation, type, location) VALUES
-${instLines.join(',\n')};
+${instLines.join(',\n')}
+${INSTITUTION_CONFLICT};
 `;
 
 const majorsSql = `-- =========================================================================
--- DATA PTN TERBARU: INSERT PRODI
+-- DATA PTN TERBARU: INSERT PRODI (idempotent, aman dijalankan ulang)
 -- Sumber: data/dataptn_mediascanter.sql (dump tabel ptn)
 -- Total: ${majorInserts.length} prodi
 -- passing_grade_total = nilai (skor passing dari dump)
 -- passing_grade_percentage = passing_grade_total / 10
 -- cluster = hasil klasifikasi rumpun (Saintek/Soshum/Campuran) dari nama prodi
 -- jenjang = dari akhiran (D-IV)/(D-III) pada nama prodi, default S1
+-- peminat = NULL (sumber tidak menyediakan jumlah peminat)
 -- year = tahun data SNBT (sesuaikan dengan tahun data terbaru)
+--
+-- PRASYARAT: jalankan data/fix_ptn_database.sql lebih dulu agar kolom code unik.
 -- =========================================================================
+CREATE UNIQUE INDEX IF NOT EXISTS ux_majors_code ON majors (code) WHERE code IS NOT NULL;
+
 ${majorsChunks.map((c, i) => `-- Chunk ${i + 1}
-INSERT INTO majors (institution_id, code, name, cluster, jenjang, daya_tampung, peminat, passing_grade_total, passing_grade_percentage, year) VALUES
-${c};`).join('\n\n')}
+INSERT INTO majors (${MAJORS_COLUMNS}) VALUES
+${c}
+${MAJOR_CONFLICT};`).join('\n\n')}
 
 -- Indeks pencarian & optimisasi
-CREATE INDEX IF NOT EXISTS idx_majors_code ON majors(code);
 CREATE INDEX IF NOT EXISTS idx_majors_institution ON majors(institution_id);
 CREATE INDEX IF NOT EXISTS idx_majors_jenjang ON majors(jenjang);
 CREATE INDEX IF NOT EXISTS idx_majors_name_trgm ON majors USING gin (name gin_trgm_ops);
@@ -228,7 +281,10 @@ fs.writeFileSync(path.join(__dirname, 'import_ptn_majors.sql'), majorsSql);
 const chunkDir = path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunkDir)) fs.mkdirSync(chunkDir, { recursive: true });
 majorsChunks.forEach((c, i) => {
-  fs.writeFileSync(path.join(chunkDir, `ptn_majors_chunk_${String(i + 1).padStart(2, '0')}.sql`), `-- Chunk ${i + 1}\nINSERT INTO majors (institution_id, code, name, cluster, jenjang, daya_tampung, peminat, passing_grade_total, passing_grade_percentage, year) VALUES\n${c};`);
+  fs.writeFileSync(
+    path.join(chunkDir, `ptn_majors_chunk_${String(i + 1).padStart(2, '0')}.sql`),
+    `-- Chunk ${i + 1} (idempotent; prasyarat: data/fix_ptn_database.sql)\nCREATE UNIQUE INDEX IF NOT EXISTS ux_majors_code ON majors (code) WHERE code IS NOT NULL;\nINSERT INTO majors (${MAJORS_COLUMNS}) VALUES\n${c}\n${MAJOR_CONFLICT};`,
+  );
 });
 
 // ---------- 5. Stats ----------

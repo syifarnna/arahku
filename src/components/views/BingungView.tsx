@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
 import { UtbkInputModal } from '@/components/modals/UtbkInputModal';
 import { displayProdiName, normalizeProdiKey } from '../../lib/prodiName';
+import { fetchAllRows } from '../../lib/supabasePaging';
 
 const CLUSTERS: ClusterType[] = ['Saintek', 'Soshum', 'Campuran'];
 
@@ -68,6 +69,21 @@ interface CampusEntry {
   institution: Institution;
   major: Major;
 }
+
+// Satu prodi bisa punya beberapa baris di kampus yang sama (mis. S1 dan D-III
+// dengan nama sama). Untuk daftar kampus, tampilkan satu baris per kampus dan
+// pertahankan PG tertinggi. Input harus sudah diurutkan PG menurun.
+const dedupeCampusEntries = (entries: CampusEntry[]): CampusEntry[] => {
+  const seen = new Set<number>();
+  const out: CampusEntry[] = [];
+  for (const entry of entries) {
+    const id = entry.institution.id;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(entry);
+  }
+  return out;
+};
 
 export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActiveTab }) => {
   const state = useAppState();
@@ -149,8 +165,8 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
   const collectCampuses = useCallback((major: Major): CampusEntry[] => {
     const key = normalizeProdiKey(major.name);
     if (!key) return [];
-    const instById = new Map(state.institutions.map(i => [i.id, i]));
-    return state.majors
+    const instById = new Map<number, Institution>(state.institutions.map(i => [i.id, i] as const));
+    const entries = state.majors
       .filter(m => normalizeProdiKey(m.name) === key)
       .map(m => {
         const institution = instById.get(m.institution_id);
@@ -158,6 +174,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       })
       .filter((x): x is CampusEntry => x != null)
       .sort((a, b) => sortByGradeDesc(a.major, b.major));
+    return dedupeCampusEntries(entries);
   }, [state.majors, state.institutions, sortByGradeDesc]);
 
   const start = () => {
@@ -224,15 +241,16 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
         });
       }
     });
+    const instById = new Map<number, Institution>(state.institutions.map(i => [i.id, i] as const));
     return Array.from(map.values())
       .map(e => ({ name: e.name, major: e.major, campusCount: e.campuses.size }))
       .sort((a, b) => {
         const peminatDiff = (b.major.peminat || 0) - (a.major.peminat || 0);
         if (peminatDiff !== 0) return peminatDiff;
-        // Tie-break: kampus favorit (grade tertinggi) lalu PG tertinggi.
-        const instA = state.institutions.find(i => i.id === a.major.institution_id);
-        const instB = state.institutions.find(i => i.id === b.major.institution_id);
-        const gradeDiff = (instB?.grade || 0) - (instA?.grade || 0);
+        // Tie-break: kampus favorit (grade rata-rata tertinggi) lalu PG tertinggi.
+        const gradeDiff =
+          (instById.get(b.major.institution_id)?.grade || 0) -
+          (instById.get(a.major.institution_id)?.grade || 0);
         if (gradeDiff !== 0) return gradeDiff;
         return sortByGradeDesc(a.major, b.major);
       });
@@ -267,13 +285,17 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
   const fetchCampusesFromServer = useCallback(async (major: Major): Promise<CampusEntry[]> => {
     const key = normalizeProdiKey(major.name);
     if (!key) return [];
-    const { data, error } = await supabase
-      .from('majors')
-      .select('*, institutions(id, name, abbreviation, type, grade, range_min, range_max)')
-      .order('passing_grade_total', { ascending: false })
-      .limit(10000);
-    if (error || !data) return [];
-    return (data as any[])
+    // Ambil SEMUA baris lewat pagination; `.limit()` di Supabase dibatasi
+    // maksimal 1000 baris sehingga daftar kampus bisa terpotong.
+    const { data, error } = await fetchAllRows<any>(() =>
+      supabase
+        .from('majors')
+        .select('*, institutions(id, name, abbreviation, type, grade, range_min, range_max)')
+        .order('passing_grade_total', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true }) as any,
+    );
+    if (error) return [];
+    const entries = data
       .filter(row => normalizeProdiKey(row.name) === key)
       .map((row: any) => ({
         institution: row.institutions as Institution,
@@ -281,6 +303,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       }))
       .filter(x => x.institution)
       .sort((a, b) => sortByGradeDesc(a.major, b.major));
+    return dedupeCampusEntries(entries);
   }, [sortByGradeDesc]);
 
   const openMajorDetail = async (major: Major) => {

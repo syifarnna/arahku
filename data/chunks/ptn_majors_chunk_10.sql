@@ -1,4 +1,5 @@
--- Chunk 10
+-- Chunk 10 (idempotent; prasyarat: data/fix_ptn_database.sql)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_majors_code ON majors (code) WHERE code IS NOT NULL;
 INSERT INTO majors (institution_id, code, name, cluster, jenjang, daya_tampung, peminat, passing_grade_total, passing_grade_percentage, year) VALUES
     (33, '22913025', 'PRODUKSI TANAMAN PERKEBUNAN', 'Saintek', 'D-III', NULL, NULL, 465.86, 46.59, 2026),
     (33, '22913026', 'BUDIDAYA PERIKANAN', 'Saintek', 'D-III', NULL, NULL, 466.8, 46.68, 2026),
@@ -499,4 +500,14 @@ INSERT INTO majors (institution_id, code, name, cluster, jenjang, daya_tampung, 
     (19, '26172028', 'AKUNTANSI BISNIS DIGITAL', 'Soshum', 'D-IV', NULL, NULL, 589.91, 58.99, 2026),
     (19, '26173011', 'ADMINISTRASI BISNIS', 'Soshum', 'D-III', NULL, NULL, 519.91, 51.99, 2026),
     (19, '26173012', 'AKUNTANSI', 'Soshum', 'D-III', NULL, NULL, 492.43, 49.24, 2026),
-    (19, '26173013', 'TEKNIK SIPIL', 'Saintek', 'D-III', NULL, NULL, 555.56, 55.56, 2026);
+    (19, '26173013', 'TEKNIK SIPIL', 'Saintek', 'D-III', NULL, NULL, 555.56, 55.56, 2026)
+ON CONFLICT (code) DO UPDATE SET
+  institution_id = EXCLUDED.institution_id,
+  name = EXCLUDED.name,
+  cluster = EXCLUDED.cluster,
+  jenjang = EXCLUDED.jenjang,
+  daya_tampung = EXCLUDED.daya_tampung,
+  peminat = EXCLUDED.peminat,
+  passing_grade_total = EXCLUDED.passing_grade_total,
+  passing_grade_percentage = EXCLUDED.passing_grade_percentage,
+  year = EXCLUDED.year;

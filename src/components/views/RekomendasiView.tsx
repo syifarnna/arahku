@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import type { ClusterType } from '../../types';
 import { RecomBestView } from './RecomBestView';
 import { RecomAlternativesView } from './RecomAlternativesView';
+import { readPenjurusanResult } from '../../lib/penjurusanResult';
 
 interface RekomendasiViewProps {
   setActiveTab?: (tab: string) => void;
@@ -32,12 +33,9 @@ export const RekomendasiView: React.FC<RekomendasiViewProps> = ({ setActiveTab, 
   const [tab, setTab] = useState<RekomendasiTab>(initialTab);
   const target = setActiveTab ?? (() => {});
 
-  const lastResult = useMemo<{ dominant: ClusterType; tally: { Saintek: number; Soshum: number; Campuran: number } } | null>(() => {
-    try {
-      const raw = localStorage.getItem('tryoutku_penjurusan_v3');
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  }, []);
+  const lastResult = useMemo<{ dominant: ClusterType; tally: { Saintek: number; Soshum: number; Campuran: number } } | null>(
+    () => readPenjurusanResult(),
+  []);
 
   return (
     <div className="space-y-6 pb-16 animate-in fade-in duration-300">

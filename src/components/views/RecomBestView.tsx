@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
+import { readPenjurusanResult } from '../../lib/penjurusanResult';
 
 const clusterStyle: Record<ClusterType, { label: string; badge: string }> = {
   Saintek: { label: 'Saintek', badge: 'bg-sky-500 text-white' },
@@ -28,12 +29,9 @@ export const RecomBestView: React.FC<{ setActiveTab?: (tab: string) => void }> =
   const state = useAppState();
 
   const autoScore = appStore.getUtbkLatestScore();
-  const lastResult = useMemo<{ dominant: ClusterType; tally: { Saintek: number; Soshum: number; Campuran: number } } | null>(() => {
-    try {
-      const raw = localStorage.getItem('tryoutku_penjurusan_v3');
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  }, []);
+  const lastResult = useMemo<{ dominant: ClusterType; tally: { Saintek: number; Soshum: number; Campuran: number } } | null>(
+    () => readPenjurusanResult(),
+  []);
   // Fallback: jika user belum menyimpan minat, pakai hasil tes penjurusan (jika ada).
   const interest = state.profile.major_interest ?? lastResult?.dominant ?? null;
 

@@ -24,6 +24,7 @@ import {
 } from './mockData';
 import { supabase, setSupabaseCredentials } from './supabaseClient';
 import { dedupeByKey, fetchAllRows } from './supabasePaging';
+import { readMasterCache, writeMasterCache } from './masterCache';
 
 // Label predikat capaian UTBK dari total score (sumber nilai tunggal: utbk_scores).
 export function getUtbkPredicateLabel(totalScore: number): TryoutResult['predicate'] {
@@ -69,6 +70,10 @@ export interface AppState {
   supabaseAnonKey?: string;
   questions: PenjurusanQuestion[];
   tutoringCenters: TutoringCenter[];
+  // Status pemuatan master data (prodi/kampus/soal). Dipakai view untuk
+  // membedakan "belum selesai dimuat" dari "memang kosong".
+  masterDataLoaded: boolean;
+  masterDataError: string | null;
 }
 
 const DEFAULT_STATE: AppState = {
@@ -88,19 +93,39 @@ const DEFAULT_STATE: AppState = {
   supabaseUrl: '',
   supabaseAnonKey: '',
   questions: [],
-  tutoringCenters: []
+  tutoringCenters: [],
+  masterDataLoaded: false,
+  masterDataError: null,
 };
 
 class AppStore {
   private state: AppState;
   private listeners: Set<() => void> = new Set();
   private _masterDataAuthed = false;
+  private _masterDataInFlight: Promise<void> | null = null;
+  private _masterDataQueued = false;
   private _loginRecordedUserId: string | null = null;
 
   constructor() {
     this.state = { ...DEFAULT_STATE };
     this.hydrateTargetsFromStorage();
+    this.hydrateMasterCache();
     this.initAuth();
+  }
+
+  // Tampilkan data master terakhir dari cache agar halaman rekomendasi tidak
+  // kosong saat reload. Data ini akan digantikan hasil fetch server.
+  private hydrateMasterCache() {
+    const snapshot = readMasterCache();
+    if (!snapshot) return;
+    if (snapshot.institutions.length > 0) {
+      this.state.institutions = snapshot.institutions;
+    }
+    this.applyMajors(snapshot.majors);
+    if (snapshot.questions.length > 0) {
+      this.state.questions = snapshot.questions;
+    }
+    this.state.masterDataLoaded = true;
   }
 
   private persistTargetsSnapshot() {
@@ -711,32 +736,73 @@ class AppStore {
     }
   }
 
-  public async fetchMasterData() {
+  // Satu fetch master pada satu waktu. Kalau ada permintaan baru saat fetch
+  // berjalan (mis. sesi login baru siap), jalankan sekali lagi setelahnya agar
+  // data yang terfilter RLS tidak tertinggal.
+  public fetchMasterData(): Promise<void> {
+    if (this._masterDataInFlight) {
+      this._masterDataQueued = true;
+      return this._masterDataInFlight;
+    }
+    const run = async () => {
+      try {
+        await this.loadMasterData();
+      } finally {
+        this._masterDataInFlight = null;
+        if (this._masterDataQueued) {
+          this._masterDataQueued = false;
+          await this.fetchMasterData();
+        } else if (!this.state.masterDataLoaded) {
+          // Selesai tanpa data (mis. DB memang kosong) -> jangan biarkan UI
+          // menampilkan loading selamanya.
+          this.state.masterDataLoaded = true;
+          this.notify();
+        }
+      }
+    };
+    this._masterDataInFlight = run();
+    return this._masterDataInFlight;
+  }
+
+  private async loadMasterData() {
+    let masterError: string | null = null;
     try {
-      const { data: tryoutsData } = await supabase.from('tryouts').select('*').order('id', { ascending: false });
-      if (tryoutsData && tryoutsData.length > 0) this.state.tryouts = tryoutsData;
-
-      const instRes = await fetchAllRows<Institution>(() =>
-        supabase.from('institutions').select('*').order('id', { ascending: true }) as any,
-      );
-      const instData = dedupeByKey(instRes.data, (row) => String(row.id));
-      if (instData.length > 0) this.state.institutions = instData;
-
-      const majorsRes = await fetchAllRows<any>(() =>
-        supabase
-          .from('majors')
-          .select('*, institutions(name, type)')
-          .order('id', { ascending: true }) as any,
-      );
-      let majorsData = majorsRes.data;
-      if (majorsRes.error) {
-        console.warn('Error fetching majors master:', majorsRes.error);
-        // Fallback to simple select without join
+      // Query prodi memakai join; kalau join gagal, ulangi tanpa join.
+      const majorsPromise = (async () => {
+        const joined = await fetchAllRows<any>(() =>
+          supabase
+            .from('majors')
+            .select('*, institutions(name, type)')
+            .order('id', { ascending: true }) as any,
+        );
+        if (!joined.error) return joined;
+        console.warn('Error fetching majors master:', joined.error);
         const fallback = await fetchAllRows<any>(() =>
           supabase.from('majors').select('*').order('id', { ascending: true }) as any,
         );
-        majorsData = fallback.data;
-      }
+        if (!fallback.error) return fallback;
+        masterError = joined.error.message || fallback.error.message;
+        return fallback;
+      })();
+
+      // Fetch independen dijalankan bersamaan supaya waktu load tidak menumpuk.
+      const [tryoutsRes, instRes, majorsRes, questionsRes, tutoringRes, compRes] = await Promise.all([
+        supabase.from('tryouts').select('*').order('id', { ascending: false }),
+        fetchAllRows<Institution>(() =>
+          supabase.from('institutions').select('*').order('id', { ascending: true }) as any,
+        ),
+        majorsPromise,
+        supabase.from('penjurusan_questions').select('*').order('id', { ascending: true }),
+        supabase.from('tutoring_centers').select('*').order('id', { ascending: true }),
+        supabase.from('competencies').select('*').order('code', { ascending: true }),
+      ]);
+
+      if (tryoutsRes.data && tryoutsRes.data.length > 0) this.state.tryouts = tryoutsRes.data;
+
+      const instData = dedupeByKey(instRes.data, (row) => String(row.id));
+      if (instData.length > 0) this.state.institutions = instData;
+
+      const majorsData = majorsRes.data;
       if (majorsData.length > 0) {
         this.applyMajors(majorsData.map((m: any) => ({
           ...m,
@@ -745,19 +811,16 @@ class AppStore {
         })));
       }
 
-      const { data: questionsData } = await supabase.from('penjurusan_questions').select('*').order('id', { ascending: true });
-      if (questionsData && questionsData.length > 0) {
-        this.state.questions = questionsData;
+      if (questionsRes.data && questionsRes.data.length > 0) {
+        this.state.questions = questionsRes.data;
       }
 
-      const { data: tutoringData } = await supabase.from('tutoring_centers').select('*').order('id', { ascending: true });
-      if (tutoringData && tutoringData.length > 0) {
-        this.state.tutoringCenters = tutoringData;
+      if (tutoringRes.data && tutoringRes.data.length > 0) {
+        this.state.tutoringCenters = tutoringRes.data;
       }
 
-      const { data: compData } = await supabase.from('competencies').select('*').order('code', { ascending: true });
-      if (compData && compData.length > 0) {
-        this.state.competencies = compData;
+      if (compRes.data && compRes.data.length > 0) {
+        this.state.competencies = compRes.data;
       }
 
       // fetch ini MENGGANTI state.majors, sehingga resolve target yang berjalan lebih
@@ -766,10 +829,20 @@ class AppStore {
       if (this.state.isLoggedIn && this.state.targetMajorIds.length > 0) {
         await this.resolveTargetMajors();
       }
-
-      this.notify();
     } catch (err) {
+      masterError = err instanceof Error ? err.message : 'Gagal memuat data master.';
       console.warn('Gagal memuat data master dari Supabase:', err);
+    } finally {
+      this.state.masterDataError = masterError;
+      if (this.state.majors.length > 0) {
+        this.state.masterDataLoaded = true;
+        writeMasterCache({
+          institutions: this.state.institutions,
+          majors: this.state.majors,
+          questions: this.state.questions,
+        });
+      }
+      this.notify();
     }
   }
 

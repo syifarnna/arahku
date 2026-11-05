@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
 import { UtbkInputModal } from '@/components/modals/UtbkInputModal';
 import { displayProdiName, normalizeProdiKey, prodiLookupKeys } from '../../lib/prodiName';
+import { readPenjurusanResult, savePenjurusanResult } from '../../lib/penjurusanResult';
 import { fetchAllRows } from '../../lib/supabasePaging';
 
 const CLUSTERS: ClusterType[] = ['Saintek', 'Soshum', 'Campuran'];
@@ -154,12 +155,9 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     else showToast('error', 'Gagal menghapus minat. Coba lagi.');
   };
 
-  const lastResult = useMemo<{ dominant: ClusterType; tally: Tally } | null>(() => {
-    try {
-      const raw = localStorage.getItem('tryoutku_penjurusan_v3');
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  }, []);
+  const lastResult = useMemo<{ dominant: ClusterType; tally: Tally } | null>(
+    () => readPenjurusanResult(),
+  []);
 
   const sortByGradeDesc = useCallback((a: Major, b: Major): number =>
     gradeOf(b) - gradeOf(a),
@@ -198,9 +196,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       const dominant = dominantOf(next);
       setPhase('result');
       setWizardStep('result');
-      try {
-        localStorage.setItem('tryoutku_penjurusan_v3', JSON.stringify({ dominant, tally: next }));
-      } catch {}
+      savePenjurusanResult({ dominant, tally: next });
     } else {
       setTally(t => ({ ...t, [cluster]: t[cluster] + w }));
       setStep(step + 1);
@@ -416,7 +412,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
   }, [autoScore, allCampusesForPicked]);
 
   const renderResult = (dominant: ClusterType) => {
-    const s = clusterStyle[dominant];
+    const s = clusterStyle[dominant] ?? clusterStyle.Campuran;
     const isLive = phase === 'result';
     const tallyData = isLive ? tally : lastResult?.tally ?? emptyTally();
 
@@ -502,9 +498,23 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
           </div>
 
           {recommendedProdi.length === 0 ? (
-            <Card className="p-6 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
-              <p className="text-sm text-slate-500">Belum ada jurusan untuk rumpun ini.</p>
-            </Card>
+            !state.masterDataLoaded ? (
+              <Card className="p-8 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
+                <Loader2 className="w-6 h-6 mx-auto text-primary animate-spin mb-2" />
+                <p className="text-sm text-slate-500">Memuat data prodi…</p>
+              </Card>
+            ) : state.masterDataError ? (
+              <Card className="p-6 text-center bg-card border border-rose-100 dark:border-rose-900/50 rounded-2xl space-y-3">
+                <p className="text-sm text-slate-500">Gagal memuat data prodi. Periksa koneksi lalu coba lagi.</p>
+                <Button variant="outline" onClick={() => { void appStore.fetchMasterData(); }} className="gap-2">
+                  <RotateCcw className="w-4 h-4" /> Coba Lagi
+                </Button>
+              </Card>
+            ) : (
+              <Card className="p-6 text-center bg-card border border-slate-100 dark:border-border rounded-2xl">
+                <p className="text-sm text-slate-500">Belum ada jurusan untuk rumpun ini.</p>
+              </Card>
+            )
           ) : (
             <div className="space-y-4">
               <div className="relative">
@@ -724,9 +734,19 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
 
       {(wizardStep === 'idle' || wizardStep === 'running' || wizardStep === 'result') && total === 0 && (
         <Card className="p-10 text-center bg-card border border-slate-100 dark:border-border rounded-3xl">
-          <HelpCircle className="w-10 h-10 mx-auto text-slate-300 mb-3" />
-          <h3 className="font-bold text-slate-700 dark:text-white">Belum ada soal penjurusan</h3>
-          <p className="text-sm text-slate-400 mt-1">Admin belum menambahkan bank soal. Silakan hubungi admin untuk mengaktifkan tes ini.</p>
+          {!state.masterDataLoaded ? (
+            <>
+              <Loader2 className="w-10 h-10 mx-auto text-primary animate-spin mb-3" />
+              <h3 className="font-bold text-slate-700 dark:text-white">Memuat soal penjurusan…</h3>
+              <p className="text-sm text-slate-400 mt-1">Menyiapkan bank soal dan data prodi.</p>
+            </>
+          ) : (
+            <>
+              <HelpCircle className="w-10 h-10 mx-auto text-slate-300 mb-3" />
+              <h3 className="font-bold text-slate-700 dark:text-white">Belum ada soal penjurusan</h3>
+              <p className="text-sm text-slate-400 mt-1">Admin belum menambahkan bank soal. Silakan hubungi admin untuk mengaktifkan tes ini.</p>
+            </>
+          )}
         </Card>
       )}
 

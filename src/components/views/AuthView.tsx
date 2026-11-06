@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, GraduationCap, Lock, Mail, ShieldCheck, User } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, GraduationCap, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { appStore } from '../../lib/store';
 import Swal from 'sweetalert2';
@@ -163,7 +163,7 @@ export const AuthView: React.FC = () => {
 
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/40">
-            <GraduationCap className="w-6 h-6" />
+            <ArrowUpRight className="w-6 h-6" />
           </div>
           <span className="font-extrabold text-2xl tracking-tight text-slate-800 dark:text-white">
             Arah<span className="text-primary">ku</span>

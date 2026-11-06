@@ -3,7 +3,21 @@ import type { Institution, Major, PenjurusanQuestion } from '../types';
 // Cache ringan master data agar blok rekomendasi tidak kosong saat reload.
 // Hanya field yang dipakai UI yang disimpan supaya tetap di bawah kuota
 // localStorage. Data dari server tetap menggantikan cache setelah fetch selesai.
-const CACHE_KEY = 'tryoutku_master_v1';
+const CACHE_KEY = 'arahku_master_v1';
+const OLD_CACHE_KEY = 'tryoutku_master_v1';
+
+// Migrasi sekali jalan dari key lama agar cache user lama tidak hilang.
+function migrateCacheKey() {
+  try {
+    if (localStorage.getItem(CACHE_KEY) != null) return;
+    const old = localStorage.getItem(OLD_CACHE_KEY);
+    if (old == null) return;
+    localStorage.setItem(CACHE_KEY, old);
+    localStorage.removeItem(OLD_CACHE_KEY);
+  } catch {
+    // Abaikan; cache bersifat opsional.
+  }
+}
 const CACHE_VERSION = 1;
 
 export interface MasterCacheSnapshot {
@@ -46,6 +60,7 @@ const isArray = (value: unknown): value is any[] => Array.isArray(value);
 
 export function readMasterCache(): MasterCacheSnapshot | null {
   try {
+    migrateCacheKey();
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed: any = JSON.parse(raw);

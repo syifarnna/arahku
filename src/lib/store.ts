@@ -143,7 +143,7 @@ class AppStore {
           passing_grade_total: m.passing_grade_total,
         })),
       };
-      localStorage.setItem('tryoutku_targets_v1', JSON.stringify(snapshot));
+      localStorage.setItem('arahku_targets_v1', JSON.stringify(snapshot));
     } catch (e) {
       console.warn('Gagal menyimpan target prodi ke localStorage:', e);
     }
@@ -151,7 +151,17 @@ class AppStore {
 
   private hydrateTargetsFromStorage() {
     try {
-      const raw = localStorage.getItem('tryoutku_targets_v1');
+      // Migrasi sekali jalan dari key lama.
+    try {
+      if (localStorage.getItem('arahku_targets_v1') == null) {
+        const old = localStorage.getItem('tryoutku_targets_v1');
+        if (old != null) {
+          localStorage.setItem('arahku_targets_v1', old);
+          localStorage.removeItem('tryoutku_targets_v1');
+        }
+      }
+    } catch {}
+    const raw = localStorage.getItem('arahku_targets_v1');
       if (!raw) return;
       const snap = JSON.parse(raw);
       if (!snap || snap.version !== 1 || !Array.isArray(snap.targetMajorIds)) return;
@@ -203,7 +213,7 @@ class AppStore {
         this.state.targetMajorIds = [];
         this._masterDataAuthed = false;
         this._loginRecordedUserId = null;
-        try { localStorage.removeItem('tryoutku_targets_v1'); } catch (e) {}
+        try { localStorage.removeItem('arahku_targets_v1'); } catch (e) {}
         this.notify();
       }
     });

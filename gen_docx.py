@@ -172,7 +172,7 @@ body.append(p('Seluruh color token menggunakan format oklch() yang merupakan col
 body.append(p('Radius scale diturunkan secara multiplikatif dari --radius: 0.625rem dengan faktor sm(0.6), md(0.8), lg(1.0), xl(1.4), 2xl(1.8), dst.'))
 body.append(p(''))
 body.append(heading('4.4 Typography & Dark Mode', 2))
-body.append(p('Font utama: Public Sans (variable weight 300-900) dimuat via Google Fonts CDN di index.html. Dark mode dikontrol oleh state isDarkMode di App.tsx yang menambahkan class dark pada wrapper div dan html element, serta disimpan di localStorage.tryoutku_theme_dark.'))
+body.append(p('Font utama: Public Sans (variable weight 300-900) dimuat via Google Fonts CDN di index.html. Dark mode dikontrol oleh state isDarkMode di App.tsx yang menambahkan class dark pada wrapper div dan html element, serta disimpan di localStorage.arahku_theme_dark.'))
 body.append(p(''))
 
 body.append(heading('5. Backend / Data Layer', 1))

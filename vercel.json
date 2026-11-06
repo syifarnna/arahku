@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "tryoutku-sigma.vercel.app"
+        }
+      ],
+      "destination": "https://arahku-sigma.vercel.app/:path*",
+      "permanent": true
+    }
+  ]
+}

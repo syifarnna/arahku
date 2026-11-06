@@ -95,7 +95,16 @@ export default function App() {
   const [isSqlModalOpen, setIsSqlModalOpen] = useState<boolean>(false);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('tryoutku_theme_dark') === 'true';
+      try {
+      if (localStorage.getItem('arahku_theme_dark') == null) {
+        const old = localStorage.getItem('tryoutku_theme_dark');
+        if (old != null) {
+          localStorage.setItem('arahku_theme_dark', old);
+          localStorage.removeItem('tryoutku_theme_dark');
+        }
+      }
+    } catch {}
+    return localStorage.getItem('arahku_theme_dark') === 'true';
     }
     return false;
   });
@@ -130,7 +139,7 @@ export default function App() {
   const handleSetDarkMode = (val: boolean) => {
     setIsDarkMode(val);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('tryoutku_theme_dark', String(val));
+      localStorage.setItem('arahku_theme_dark', String(val));
     }
   };
 

@@ -389,7 +389,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     const withPg = allCampusesForPicked.filter(c => c.major.passing_grade_total != null);
     const grade = (c: CampusEntry) => c.major.passing_grade_total || 0;
     // Top: kampus terbaik (PG tertinggi) untuk prodi ini — kota tidak dipertimbangkan.
-    const top = [...withPg].sort((a, b) => grade(b) - grade(a)).slice(0, 6);
+    const top = [...withPg].sort((a, b) => grade(b) - grade(a)).slice(0, 12);
     const topIds = new Set(top.map(c => c.major.id));
     const rest = withPg.filter(c => !topIds.has(c.major.id));
     // Pas & Aman: PG tertinggi didahulukan.
@@ -685,7 +685,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                   <div className="flex items-center gap-2 mb-1">
                     <Icon className={cn('w-5 h-5', g.accent)} />
                     <h4 className="font-extrabold text-base text-slate-800 dark:text-white">{g.title}</h4>
-                    <Badge variant="secondary" className="text-[10px] font-bold ml-1">{g.data.length} kampus</Badge>
+                    <Badge variant="secondary" className="text-[10px] font-bold ml-1">{Math.min(g.data.length, 3)} dari {g.data.length} kampus</Badge>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">{g.note}</p>
                   {g.data.length === 0 ? (
@@ -693,9 +693,14 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                       <p className="text-[11px] text-slate-400">Belum ada kampus pada kategori ini untuk nilai Anda.</p>
                     </Card>
                   ) : (
-                    <div className="space-y-2">
-                      {g.data.map(item => renderCampusRow(item, badge))}
-                    </div>
+                    <>
+                      <div className="space-y-2">
+                        {g.data.slice(0, 3).map(item => renderCampusRow(item, badge))}
+                      </div>
+                      {g.data.length > 3 && (
+                        <p className="text-[11px] text-slate-400 mt-2 pl-1">+{g.data.length - 3} kampus lainnya tidak ditampilkan.</p>
+                      )}
+                    </>
                   )}
                 </div>
               );

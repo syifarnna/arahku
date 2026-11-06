@@ -356,6 +356,13 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     }
   };
 
+  // Hasil tes bisa berasal dari sesi tes aktif (`phase === 'result'`) atau dari
+  // hasil tersimpan setelah reload (`phase === 'idle'`). Tombol Kembali harus
+  // mengarah ke blok yang benar-benar dirender agar halaman tidak kosong.
+  const backToResult = () => {
+    setWizardStep(phase === 'result' ? 'result' : 'idle');
+  };
+
   const handlePickMajor = (major: Major) => {
     setPickedMajor(major);
     if (autoScore == null) {
@@ -609,7 +616,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
           <Button variant="outline" onClick={() => setActiveTab?.('dashboard')} className="gap-2">
             <ArrowRight className="w-4 h-4" /> Ke Dashboard
           </Button>
-          <Button variant="ghost" onClick={() => setWizardStep('result')} className="gap-2">
+          <Button variant="ghost" onClick={backToResult} className="gap-2">
             <ArrowLeft className="w-4 h-4" /> Kembali
           </Button>
         </div>
@@ -641,7 +648,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => setWizardStep('result')} className="gap-1.5 text-xs h-auto py-1.5">
+            <Button variant="outline" size="sm" onClick={backToResult} className="gap-1.5 text-xs h-auto py-1.5">
               <ArrowLeft className="w-3.5 h-3.5" /> Kembali
             </Button>
             <div>

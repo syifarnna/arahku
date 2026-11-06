@@ -99,8 +99,6 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
   const [savingInterest, setSavingInterest] = useState(false);
   const [descCache, setDescCache] = useState<Record<number, MajorDescription>>({});
   const [selectedMajor, setSelectedMajor] = useState<Major | null>(null);
-  const [campusesForMajor, setCampusesForMajor] = useState<CampusEntry[]>([]);
-  const [loadingCampuses, setLoadingCampuses] = useState(false);
   const [pickedMajor, setPickedMajor] = useState<Major | null>(null);
   const [allCampusesForPicked, setAllCampusesForPicked] = useState<CampusEntry[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -334,22 +332,10 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     return dedupeCampusEntries(entries);
   }, [sortByGradeDesc]);
 
-  const openMajorDetail = async (major: Major) => {
+  // Modal review: cukup simpan prodi yang dipilih. Daftar lengkap kampus
+  // diambil di halaman rekomendasi kampus, bukan di sini.
+  const openMajorDetail = (major: Major) => {
     setSelectedMajor(major);
-    const local = collectCampuses(major);
-    if (local.length > 0) {
-      setCampusesForMajor(local);
-      setLoadingCampuses(false);
-      return;
-    }
-    setLoadingCampuses(true);
-    try {
-      setCampusesForMajor(await fetchCampusesFromServer(major));
-    } catch {
-      setCampusesForMajor([]);
-    } finally {
-      setLoadingCampuses(false);
-    }
   };
 
   const fetchCampusesForMajor = async (major: Major) => {
@@ -838,8 +824,9 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                   </Badge>
                   <JenjangBadge jenjang={selectedMajor.jenjang} />
                 </div>
-                <p className="text-xs text-slate-400">
-                  {loadingCampuses ? 'Memuat kampus...' : ''}
+                <p className="text-xs text-slate-400 inline-flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  Ditawarkan di {collectCampuses(selectedMajor).length} kampus — daftar lengkapnya ada di langkah berikutnya.
                 </p>
               </div>
               <button onClick={() => setSelectedMajor(null)} className="p-2 rounded-xl hover:bg-muted transition-colors cursor-pointer">
@@ -862,60 +849,22 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                   <p className="text-sm text-emerald-700 dark:text-emerald-400 leading-relaxed">{descCache[selectedMajor.id].career_prospects}</p>
                 </div>
               )}
-
-              <div>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-primary" /> Kampus dengan Jurusan Ini
-                </h4>
-                {loadingCampuses ? (
-                  <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span className="text-xs">Memuat daftar kampus...</span>
-                  </div>
-                ) : campusesForMajor.length === 0 ? (
-                  <p className="text-sm text-slate-400 py-4 text-center">Tidak ditemukan kampus lain dengan jurusan ini.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {campusesForMajor.map((item, idx) => (
-                      <div key={`${item.major.id}-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-border">
-                        <div className="min-w-0">
-                          <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{item.institution.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <Badge variant="outline" className="text-[9px] font-bold h-auto px-1.5 py-0.5">{item.institution.type}</Badge>
-                            <JenjangBadge jenjang={item.major.jenjang} />
-                          </div>
-                        </div>
-                        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 shrink-0 ml-3">PG {item.major.passing_grade_total ?? '—'}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {descCache[selectedMajor.id] == null ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Memuat deskripsi prodi…
+                </div>
+              ) : !descCache[selectedMajor.id].found && (
+                <p className="text-xs text-slate-400">Deskripsi prodi ini belum tersedia.</p>
+              )}
             </div>
 
-            <div className="p-4 border-t border-slate-100 dark:border-border space-y-3">
-              <p className="text-[11px] text-slate-400">
-                Target disimpan untuk jurusan <strong className="text-slate-600 dark:text-slate-300">{displayProdiName(selectedMajor.name)}</strong>
-                {selectedMajor.institution_name ? <> (kampus: {selectedMajor.institution_name})</> : null}.
-              </p>
-              <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => { const m = selectedMajor; setSelectedMajor(null); handlePickMajor(m); }}
-                  className="gap-1.5"
-                >
-                  <Building2 className="w-4 h-4" /> Lihat Rekomendasi Kampus
-                </Button>
-                {state.targetMajorIds.includes(selectedMajor.id) ? (
-                  <Button disabled className="gap-2 bg-emerald-600 text-white hover:bg-emerald-600 opacity-100">
-                    <CheckCircle2 className="w-4 h-4" /> Sudah Jadi Target
-                  </Button>
-                ) : (
-                  <Button onClick={() => appStore.addTargetMajor(selectedMajor.id)} className="gap-2">
-                    <Target className="w-4 h-4" /> Jadikan Prodi Target
-                  </Button>
-                )}
-              </div>
+            <div className="p-4 border-t border-slate-100 dark:border-border">
+              <Button
+                onClick={() => { const m = selectedMajor; setSelectedMajor(null); handlePickMajor(m); }}
+                className="w-full gap-2"
+              >
+                <Building2 className="w-4 h-4" /> Lanjut ke Rekomendasi Kampus <ArrowRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </div>

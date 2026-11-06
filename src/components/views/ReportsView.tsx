@@ -32,7 +32,7 @@ export const ReportsView: React.FC = () => {
       
       <div className="border-b border-slate-100 dark:border-border pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white">Modul Laporan Eksekutif TryoutKu</h2>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white">Modul Laporan Eksekutif Arahku</h2>
           <p className="text-xs text-slate-400 mt-0.5">Unduh berkas resmi PDF & Excel untuk evaluasi orang tua atau guru sekolah</p>
         </div>
 

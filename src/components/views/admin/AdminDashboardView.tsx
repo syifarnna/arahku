@@ -47,7 +47,7 @@ export const AdminDashboardView: React.FC<{ setActiveTab: (tab: string) => void 
       <div>
         <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Dashboard Administrator</h2>
         <p className="text-slate-500 dark:text-muted-foreground mt-1">
-          Ringkasan sistem TryoutKu dan akses cepat ke panel manajemen. Data disinkronkan langsung dari database Supabase ({state.institutions.length} kampus, {formatNumber(prodiStats?.totalProdi ?? state.majors.length)} prodi, {state.questions.length} soal penjurusan, {state.tutoringCenters.length} bimbel terdaftar).
+          Ringkasan sistem Arahku dan akses cepat ke panel manajemen. Data disinkronkan langsung dari database Supabase ({state.institutions.length} kampus, {formatNumber(prodiStats?.totalProdi ?? state.majors.length)} prodi, {state.questions.length} soal penjurusan, {state.tutoringCenters.length} bimbel terdaftar).
         </p>
       </div>
 

@@ -12,7 +12,7 @@ export function exportResultsPDF(results: TryoutResult[], studentName: string) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('TryoutKu - Laporan Resmi Hasil Tryout', 14, 18);
+  doc.text('Arahku - Laporan Resmi Hasil UTBK', 14, 18);
 
   doc.setTextColor(80, 80, 80);
   doc.setFontSize(11);
@@ -49,7 +49,7 @@ export function exportAnalysisPDF(summary: AnalysisSummary, studentName: string)
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('TryoutKu - Analisis Kelulusan Passing Grade', 14, 18);
+  doc.text('Arahku - Analisis Kelulusan Passing Grade', 14, 18);
 
   doc.setTextColor(80, 80, 80);
   doc.setFontSize(11);

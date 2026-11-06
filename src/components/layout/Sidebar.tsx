@@ -159,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="flex flex-col flex-1 min-w-0">
             <span className="font-bold text-xl tracking-tight text-slate-800 dark:text-white">
-              Tryout<span className="text-primary">Ku</span>
+              Arah<span className="text-primary">ku</span>
             </span>
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
               Sneat Admin

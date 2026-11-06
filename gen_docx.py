@@ -85,11 +85,11 @@ def bullet(text):
 body = ET.Element(qn('w:body'))
 
 body.append(p('DOKUMENTASI TEKNOLOGI', style='Title'))
-body.append(p('TryoutKu - Platform Simulasi Tryout & Analisis Passing Grade'))
+body.append(p('Arahku - Platform Penjurusan & Rekomendasi Kampus PTN'))
 body.append(p(''))
 
 body.append(heading('1. Ringkasan Proyek', 1))
-body.append(p('TryoutKu adalah platform web berbasis Single Page Application (SPA) untuk simulasi tryout masuk perguruan tinggi di Indonesia. Aplikasi ini menyediakan fitur analisis passing grade, gap analysis kompetensi per subtes UTBK SNBT, rekomendasi program studi dan institut alternatif, serta tes penjurusan minat.'))
+body.append(p('Arahku adalah platform web berbasis Single Page Application (SPA) untuk membantu siswa menemukan jurusan dan kampus PTN yang cocok. Aplikasi ini menyediakan tes penjurusan minat, rekomendasi program studi dan kampus alternatif, analisis passing grade, serta gap analysis kompetensi per subtes UTBK SNBT.'))
 body.append(p(''))
 body.append(heading('Stack Teknologi Utama', 2))
 for item in [

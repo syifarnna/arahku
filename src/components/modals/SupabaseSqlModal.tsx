@@ -84,7 +84,7 @@ export const SupabaseSqlModal: React.FC<SupabaseSqlModalProps> = ({ isOpen, onCl
               <div className="text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
                 <p className="font-bold">Mode Live Demo Siap Pakai</p>
                 <p className="text-indigo-700 dark:text-indigo-300 leading-relaxed">
-                  Aplikasi TryoutKu saat ini berjalan dengan <strong>Local Instant Engine</strong> yang sudah diisi puluhan universitas, passing grade real, dan 7 kompetensi SNBT. Anda tidak wajib mengisi kredensial API untuk mencoba seluruh fitur analisis!
+                  Aplikasi Arahku saat ini berjalan dengan <strong>Local Instant Engine</strong> yang sudah diisi puluhan universitas, passing grade real, dan 7 kompetensi SNBT. Anda tidak wajib mengisi kredensial API untuk mencoba seluruh fitur analisis!
                 </p>
               </div>
             </div>

@@ -105,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Cari tryout, universitas target, passing grade..."
+              placeholder="Cari jurusan, kampus, atau passing grade..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-card border border-transparent focus:border-primary dark:focus:border-primary rounded-xl text-xs font-medium text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none transition-all"

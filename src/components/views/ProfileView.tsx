@@ -43,8 +43,8 @@ export const ProfileView: React.FC = () => {
     <div className="max-w-3xl space-y-8 pb-16 animate-in fade-in duration-300">
       
       <div className="border-b border-slate-100 dark:border-border pb-4">
-        <h2 className="text-xl font-bold text-slate-800 dark:text-white">Pengaturan Profil Siswa TryoutKu</h2>
-        <p className="text-xs text-slate-400 mt-0.5">Kelola identitas peserta tryout dan preferensi rumpun minat jurusan</p>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-white">Pengaturan Profil Siswa Arahku</h2>
+        <p className="text-xs text-slate-400 mt-0.5">Kelola identitas peserta dan preferensi rumpun minat jurusan</p>
       </div>
 
       <form onSubmit={handleSubmit}>

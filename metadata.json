@@ -1,6 +1,6 @@
 {
-  "name": "TryoutKu",
-  "description": "Platform tryout simulasi masuk perguruan tinggi dengan analisis passing grade, gap analysis kompetensi, dan rekomendasi institut alternatif.",
+  "name": "Arahku",
+  "description": "Platform penjurusan dan rekomendasi kampus PTN dengan tes minat & bakat, analisis nilai UTBK, serta daftar prodi target.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -166,7 +166,7 @@ export const AuthView: React.FC = () => {
             <GraduationCap className="w-6 h-6" />
           </div>
           <span className="font-extrabold text-2xl tracking-tight text-slate-800 dark:text-white">
-            Tryout<span className="text-primary">Ku</span>
+            Arah<span className="text-primary">ku</span>
           </span>
         </div>
 
@@ -177,8 +177,8 @@ export const AuthView: React.FC = () => {
             {mode === 'reset' && 'Atur Ulang Kata Sandi'}
           </h3>
           <p className="text-xs text-muted-foreground">
-            {mode === 'login' && 'Silakan masuk menggunakan kredensial akun TryoutKu Anda'}
-            {mode === 'register' && 'Buat akun siswa TryoutKu untuk mulai mengerjakan tryout'}
+            {mode === 'login' && 'Silakan masuk menggunakan kredensial akun Arahku Anda'}
+            {mode === 'register' && 'Buat akun siswa Arahku untuk menemukan jurusan & kampus yang cocok'}
             {mode === 'reset' && 'Kami akan mengirimkan tautan reset password ke email Anda'}
           </p>
         </div>
@@ -360,7 +360,7 @@ export const AuthView: React.FC = () => {
           <hr className="mb-6 border-border" />
           {mode === 'login' ? (
             <p>
-              Belum punya akun tryout?{' '}
+              Belum punya akun?{' '}
               <button type="button" onClick={() => switchMode('register')} className="font-bold p-0 h-auto text-primary hover:underline cursor-pointer bg-transparent border-none">
                 Buat Akun Siswa
               </button>

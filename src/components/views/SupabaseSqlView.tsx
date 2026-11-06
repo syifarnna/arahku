@@ -34,7 +34,7 @@ export const SupabaseSqlView: React.FC = () => {
   };
 
   const seedSql = `-- ==========================================
--- SEED DATA AWAL TRYOUTKU (PTN & PRODI SNBT)
+-- SEED DATA AWAL ARAHKU (PTN & PRODI SNBT)
 -- ==========================================
 
 -- 1. Insert Kompetensi Dasar SNBT

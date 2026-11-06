@@ -1,5 +1,5 @@
 /**
- * @license TryoutKu - Sneat Bootstrap Admin Platform
+ * @license Arahku - Sneat Bootstrap Admin Platform
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -251,7 +251,7 @@ export default function App() {
               </div>
               <h3 className="font-bold text-lg text-slate-800 dark:text-white">Akses Khusus Administrator</h3>
               <p className="text-xs text-slate-500 dark:text-muted-foreground leading-relaxed">
-                Akun Anda bertindak sebagai <span className="font-bold text-indigo-600 dark:text-indigo-400">Peserta Tryout</span>. Hak pengubahan skema SQL, eksekusi DDL, maupun konfigurasi koneksi Live Supabase dibatasi hanya untuk Administrator.
+                Akun Anda bertindak sebagai <span className="font-bold text-indigo-600 dark:text-indigo-400">Peserta</span>. Hak pengubahan skema SQL, eksekusi DDL, maupun konfigurasi koneksi Live Supabase dibatasi hanya untuk Administrator.
               </p>
               <button onClick={() => setActiveTab('dashboard')} className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-md hover:bg-primary/90 transition-all cursor-pointer">
                 Kembali ke Dashboard

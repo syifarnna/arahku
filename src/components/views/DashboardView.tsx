@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppState } from '../../lib/store';
 import { appStore } from '../../lib/store';
 import { cn, formatNumber } from '../../lib/utils';
+import { buildProdiPgRanges } from '../../lib/pgRange';
+import { normalizeProdiKey } from '../../lib/prodiName';
 import { searchMajors, getMajorsStats, getPopularMajors, MajorsStats } from '../../lib/prodiSearch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -128,9 +130,16 @@ export const DashboardView: React.FC<{ onTakeTryout: (t: any) => void; setActive
 
   const fmt = (n?: number | null) => n == null ? '—' : formatNumber(n);
 
-  // Keketangan (tightness) prodi = rasio jumlah peminat terhadap daya tampung (%).
-  // Bukan passing grade percentage — nilai yang benar untuk "keketangan" kompetisi.
-  const tightness = (m: Major) => (m.daya_tampung && m.daya_tampung > 0 && m.peminat != null) ? `${((m.peminat / m.daya_tampung) * 100).toFixed(0)}%` : '—';
+  // Rentang passing grade (terkecil-tertinggi) tiap prodi — setiap kampus yang
+  // menawarkan prodi dengan nama yang sama dikelompokkan jadi satu prodi, sehingga
+  // kartu menampilkan rentang PG tertinggi & terendah (mis. "PG 540–620").
+  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
+
+  const pgRangeFor = (m: Major): string => {
+    const range = prodiPgRanges.get(normalizeProdiKey(m.name));
+    if (!range) return `PG ${m.passing_grade_total ?? '—'}`;
+    return range.min === range.max ? `PG ${range.min}` : `PG ${range.min}–${range.max}`;
+  };
 
   const activeTargetMajorId = state.activeTargetMajorId || state.targetMajorIds[0];
   const targetMajor = activeTargetMajorId ? state.majors.find(m => m.id === activeTargetMajorId) : undefined;
@@ -436,7 +445,6 @@ const utbkCountdown = useMemo(() => {
             }
             const inst = state.institutions.find(i => i.id === m.institution_id);
             const cs = CLUSTER_STYLE[m.cluster === 'Saintek' || m.cluster === 'Soshum' || m.cluster === 'Campuran' ? m.cluster : 'Campuran'];
-            const keketatan = tightness(m);
             return (
               <Card key={m.id} className={cn("p-5 rounded-2xl border border-slate-200 dark:border-border shadow-xs flex flex-col gap-3", cs.row)}>
                 <div className="flex items-start justify-between gap-2">
@@ -449,15 +457,13 @@ const utbkCountdown = useMemo(() => {
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant="secondary" className={cn("text-[10px] font-bold gap-1.5 border", cs.badge)}><span className={cn("w-1.5 h-1.5 rounded-full", cs.dot)} />{m.cluster}</Badge>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-slate-400">Daya:</span> <span className="font-bold text-slate-700 dark:text-white">{fmt(m.daya_tampung)}</span></div>
-                  <div><span className="text-slate-400">Peminat:</span> <span className="font-bold text-slate-700 dark:text-white">{fmt(m.peminat)}</span></div>
-                  <div><span className="text-slate-400">Keketatan:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{keketatan}</span></div>
+                  <div><span className="text-slate-400">PG:</span> <span className="font-bold text-primary">{pgRangeFor(m)}</span></div>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-border">
-                  <span className="text-[10px] text-slate-400">PG: <span className="font-bold text-primary">{m.passing_grade_total ?? '—'}</span></span>
+                <div className="flex items-center justify-end pt-2 border-t border-slate-100 dark:border-border">
                   <Button size="sm" variant="ghost" onClick={() => { appStore.setActiveTargetMajor(m.id); setActiveTab('target_majors'); }} className="text-xs gap-1.5 h-auto">
-                    Lihat Detail <ArrowRight className="w-3.5 h-3.5" />
+                    Lihat Detail <ArrowRight className="w-3.5 h-3.5" /> 
                   </Button>
                 </div>
               </Card>
@@ -504,10 +510,9 @@ const utbkCountdown = useMemo(() => {
                     <JenjangBadge jenjang={m.jenjang} />
                     <Badge variant="secondary" className={cn("text-[10px] font-bold border", cs.badge)}>{m.cluster}</Badge>
                   </div>
-                  <div className="grid grid-cols-3 gap-1 text-[10px]">
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
                     <div><span className="text-slate-400">Daya:</span> <span className="font-bold">{fmt(m.daya_tampung)}</span></div>
-                    <div><span className="text-slate-400">Peminat:</span> <span className="font-bold">{fmt(m.peminat)}</span></div>
-                    <div><span className="text-slate-400">Keketangan:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{tightness(m)}</span></div>
+                    <div><span className="text-slate-400">PG:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{pgRangeFor(m)}</span></div>
                   </div>
                 </Card>
               );

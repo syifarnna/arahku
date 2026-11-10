@@ -13,6 +13,7 @@ import { UtbkInputModal } from '@/components/modals/UtbkInputModal';
 import { displayProdiName, normalizeProdiKey, prodiLookupKeys } from '../../lib/prodiName';
 import { readPenjurusanResult, savePenjurusanResult } from '../../lib/penjurusanResult';
 import { fetchAllRows } from '../../lib/supabasePaging';
+import { buildProdiPgRanges } from '../../lib/pgRange';
 
 const CLUSTERS: ClusterType[] = ['Saintek', 'Soshum', 'Campuran'];
 
@@ -210,6 +211,14 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
     // minat dianggap seimbang lintas rumpun.
     if (entries[0].n - entries[1].n <= 0.1 * grandTotal) return 'Campuran';
     return entries[0].c;
+  };
+
+  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
+
+  const pgRangeLabel = (major: Major) => {
+    const range = prodiPgRanges.get(normalizeProdiKey(major.name));
+    if (!range) return `PG ${major.passing_grade_total ?? '—'}`;
+    return range.min === range.max ? `PG ${range.min}` : `PG ${range.min}–${range.max}`;
   };
 
   const recommendedProdi = useMemo(() => {
@@ -547,6 +556,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
                           <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug line-clamp-2">{p.name}</h4>
                         </div>
                         <div className="flex w-full items-center justify-end gap-2">
+                          <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">{pgRangeLabel(p.major)}</span>
                           <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 group-hover:text-primary transition-colors" />
                         </div>
                       </button>

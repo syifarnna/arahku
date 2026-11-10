@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
 import { readPenjurusanResult } from '../../lib/penjurusanResult';
+import { buildProdiPgRanges } from '../../lib/pgRange';
+import { normalizeProdiKey } from '../../lib/prodiName';
 
 const clusterStyle: Record<ClusterType, { label: string; badge: string }> = {
   Saintek: { label: 'Saintek', badge: 'bg-sky-500 text-white' },
@@ -34,6 +36,17 @@ export const RecomBestView: React.FC<{ setActiveTab?: (tab: string) => void }> =
   []);
   // Fallback: jika user belum menyimpan minat, pakai hasil tes penjurusan (jika ada).
   const interest = state.profile.major_interest ?? lastResult?.dominant ?? null;
+
+  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
+
+  const pgRangeFor = (m: (typeof state.majors)[number]) => {
+    const range = prodiPgRanges.get(normalizeProdiKey(m.name));
+    const pg = m.passing_grade_total;
+    if (!range) return `PG ${pg ?? '—'}`;
+    const min = Math.min(range.min, pg ?? range.min);
+    const max = Math.max(range.max, pg ?? range.max);
+    return min === max ? `PG ${min}` : `PG ${min}–${max}`;
+  };
 
   const { tier1, tier2, tier3, totalReachable } = useMemo(() => {
     if (autoScore == null || !interest) return { tier1: [] as typeof state.majors, tier2: [] as typeof state.majors, tier3: [] as typeof state.majors, totalReachable: 0 };
@@ -90,7 +103,7 @@ export const RecomBestView: React.FC<{ setActiveTab?: (tab: string) => void }> =
         </Badge>
         <JenjangBadge jenjang={m.jenjang} />
         <Badge variant="outline" className="rounded-md text-[10px] font-bold">
-          PG {fmt(m.passing_grade_total)}
+          {pgRangeFor(m)}
         </Badge>
         <Badge className="rounded-full text-[9px] font-bold h-auto px-2 py-0.5 bg-emerald-500 text-white">
           ✓ Nilai Cukup

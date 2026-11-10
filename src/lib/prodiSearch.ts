@@ -28,6 +28,38 @@ export interface MajorsStats {
   campuran: number;
 }
 
+export interface CampusPassingGradeRange {
+  institution_id: number;
+  institution_name: string;
+  grade_campus: number | null;
+  nilai_min: number | null;
+  nilai_max: number | null;
+  /** Format string "NilaiMin – NilaiMax" (mis. "75 – 92"), atau "-" jika belum ada data. */
+  range: string;
+}
+
+// Backend: hitung rentang passing grade (MIN/MAX) per PTN dari seluruh prodi
+// yang terhubung, lalu format jadi string "NilaiMin – NilaiMax" (atau "-").
+export async function getCampusPassingGradeRanges(): Promise<CampusPassingGradeRange[]> {
+  const { data, error } = await supabase.rpc('get_campus_pg_ranges');
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as any[];
+  return rows.map((r) => {
+    const nilaiMin = r.nilai_min != null ? Number(r.nilai_min) : null;
+    const nilaiMax = r.nilai_max != null ? Number(r.nilai_max) : null;
+    const range = nilaiMin != null && nilaiMax != null ? `${nilaiMin} – ${nilaiMax}` : '-';
+    return {
+      institution_id: Number(r.institution_id),
+      institution_name: String(r.institution_name ?? ''),
+      grade_campus: r.grade_campus != null ? Number(r.grade_campus) : null,
+      nilai_min: nilaiMin,
+      nilai_max: nilaiMax,
+      range,
+    };
+  });
+}
+
+
 // Server-side search + pagination via RPC search_majors.
 // total dikembalikan oleh RPC (count seluruh baris yang cocok sebelum offset).
 export async function searchMajors(p: SearchMajorsParams = {}): Promise<SearchMajorsResult> {

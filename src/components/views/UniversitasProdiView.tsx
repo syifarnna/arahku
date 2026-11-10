@@ -4,6 +4,8 @@ import { useAppState, appStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { searchMajors, getMajorsStats, useDebouncedValue, MajorsStats } from '../../lib/prodiSearch';
 import { matchesInstitution, primaryAbbreviation } from '../../lib/institutionSearch';
+import { buildProdiPgRanges } from '../../lib/pgRange';
+import { normalizeProdiKey } from '../../lib/prodiName';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -129,6 +131,7 @@ export const CampusList: React.FC = () => {
   }, []);
 
   const q = search.trim().toLowerCase();
+
   const filtered = useMemo(
     () =>
       state.institutions.filter(
@@ -291,6 +294,20 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
   const debouncedSearch = useDebouncedValue(search, 500);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const majorsReady = state.majors.length > 0;
+
+  // Rentang passing grade (terkecil-tertinggi) tiap prodi — prodi yang sama dari
+  // beberapa kampus dikelompokkan jadi satu prodi, kartu menampilkan rentang PG.
+  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
+
+  const pgRangeFor = (m: Major): string => {
+    const range = prodiPgRanges.get(normalizeProdiKey(m.name));
+    const pg = m.passing_grade_total;
+    if (!range) return `PG ${pg ?? '—'}`;
+    const min = Math.min(range.min, pg ?? range.min);
+    const max = Math.max(range.max, pg ?? range.max);
+    return min === max ? `PG ${min}` : `PG ${min}–${max}`;
+  };
+
 
   useEffect(() => {
     setPage(1);
@@ -473,16 +490,14 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
                 <th className="px-4 py-3">Rumpun</th>
                 <th className="px-4 py-3">Jenjang</th>
                 <th className="px-4 py-3 text-right">Daya</th>
-                <th className="px-4 py-3 text-right">Peminat</th>
-                <th className="px-4 py-3 text-right">P. Grade</th>
-                <th className="px-4 py-3 text-right">%</th>
+                <th className="px-4 py-3 text-right">PG Range</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
+                  <td colSpan={7} className="px-4 py-14 text-center text-slate-400">
                     {isEmptyCampus ? (
                       <>
                         <School className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -499,7 +514,7 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
               )}
               {loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
+                  <td colSpan={7} className="px-4 py-14 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto opacity-50" />
                     <span className="text-xs mt-2 block">Memuat data prodi...</span>
                   </td>
@@ -522,11 +537,7 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
                       <JenjangBadge jenjang={m.jenjang} />
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">{fmt(m.daya_tampung)}</td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">{fmt(m.peminat)}</td>
-                    <td className="px-4 py-3 text-right text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{m.passing_grade_total != null ? m.passing_grade_total : '—'}</td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-500 whitespace-nowrap">
-                      {m.passing_grade_percentage != null ? `${m.passing_grade_percentage}` : '—'}
-                    </td>
+                    <td className="px-4 py-3 text-right text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{pgRangeFor(m)}</td>
                     <td className="px-4 py-3 text-right">
                       {isTarget ? (
                         <Badge className="text-[10px] font-bold gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border-0">

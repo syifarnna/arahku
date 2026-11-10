@@ -596,7 +596,7 @@ export const BingungView: React.FC<{ setActiveTab?: (tab: string) => void }> = (
         </div>
       </div>
       <div className="text-right shrink-0 ml-3">
-        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400">PG {item.major.passing_grade_total ?? '—'}</p>
+        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400">{pgRangeLabel(item.major)}</p>
         {!state.targetMajorIds.includes(item.major.id) ? (
           <button
             onClick={() => appStore.addTargetMajor(item.major.id)}

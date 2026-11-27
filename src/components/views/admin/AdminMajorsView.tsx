@@ -1,9 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppState, appStore } from '../../../lib/store';
-import { Plus, Trash2, Upload, FileSpreadsheet, AlertCircle, Pencil, Search, X, Loader2 } from 'lucide-react';
+import { AlertCircle, Pencil, Search, X } from 'lucide-react';
 import { Major } from '../../../types';
-import * as XLSX from 'xlsx';
-import { supabase } from '../../../lib/supabaseClient';
 import { getErrorMessage, cn, formatNumber } from '../../../lib/utils';
 import Swal from 'sweetalert2';
 import { searchMajors, getMajorsStats, useDebouncedValue, MajorsStats } from '../../../lib/prodiSearch';
@@ -15,39 +13,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Pagination } from '@/components/ui/Pagination';
-import { JENJANG_OPTIONS, JenjangBadge, normalizeJenjang } from '@/components/ui/JenjangBadge';
-
-const inferJenjang = (name?: string): string => {
-  const n = (name || '').toUpperCase();
-  if (/D\s*[-]?\s*4/.test(n)) return 'D4';
-  if (/D\s*[-]?\s*3/.test(n)) return 'D3';
-  return 'S1';
-};
+import { JENJANG_OPTIONS, JenjangBadge } from '@/components/ui/JenjangBadge';
 
 const PAGE_SIZE = 25;
 
-const EMPTY_FORM = {
-  name: '',
-  institution_id: 1,
-  cluster: 'Saintek',
-  jenjang: 'S1',
-  passing_grade_total: 650,
-};
-
 export const AdminMajorsView: React.FC = () => {
   const state = useAppState();
-  const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [importLoading, setImportLoading] = useState(false);
-  const [importError, setImportError] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
   const [jenjangFilter, setJenjangFilter] = useState<'SEMUA' | string>('SEMUA');
   const [query, setQuery] = useState('');
   const [errors, setErrors] = useState<{ name?: string; jenjang?: string }>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState({
+    name: '',
+    institution_id: 1,
+    cluster: 'Saintek',
+    jenjang: 'S1',
+    passing_grade_total: 650,
+  });
 
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-
-  // State server-side search & pagination
   const debouncedQuery = useDebouncedValue(query, 500);
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<Major[]>([]);
@@ -56,22 +40,18 @@ export const AdminMajorsView: React.FC = () => {
   const [loadError, setLoadError] = useState('');
   const [stats, setStats] = useState<MajorsStats | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilter = jenjangFilter !== 'SEMUA' || debouncedQuery.trim().length > 0;
 
-  // Search/filter berubah -> kembali ke halaman 1
   useEffect(() => {
     setPage(1);
   }, [debouncedQuery, jenjangFilter]);
 
-  // Auto-clamp halaman bila total menyusut (misal setelah delete)
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  // Fetch ke server (RPC search_majors) dengan debounce
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -100,7 +80,6 @@ export const AdminMajorsView: React.FC = () => {
     };
   }, [debouncedQuery, jenjangFilter, page, reloadKey]);
 
-  // Statistik global untuk jumlah per jenjang di dropdown
   useEffect(() => {
     let cancelled = false;
     getMajorsStats()
@@ -114,19 +93,13 @@ export const AdminMajorsView: React.FC = () => {
   }, [reloadKey]);
 
   const resetForm = () => {
-    setForm({ ...EMPTY_FORM });
+    setForm({ name: '', institution_id: 1, cluster: 'Saintek', jenjang: 'S1', passing_grade_total: 650 });
     setErrors({});
-  };
-
-  const startAdd = () => {
-    setEditingId(null);
-    resetForm();
-    setIsAdding(true);
   };
 
   const startEdit = (m: Major) => {
     setEditingId(m.id);
-    setIsAdding(true);
+    setIsEditing(true);
     setErrors({});
     setForm({
       name: m.name || '',
@@ -138,113 +111,39 @@ export const AdminMajorsView: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const closeForm = () => {
+    setIsEditing(false);
+    setEditingId(null);
+    resetForm();
+  };
+
   const refresh = () => setReloadKey(k => k + 1);
 
+  // Hanya mengubah baris yang sudah ada. Data prodi bersumber tunggal dari
+  // Mediascanter (kode 8 digit / 2026), sehingga tidak ada tombol tambah/import.
   const handleSave = () => {
+    if (editingId == null) return;
     const nextErrors: { name?: string; jenjang?: string } = {};
     if (!form.name.trim()) nextErrors.name = 'Nama jurusan wajib diisi.';
     if (!form.jenjang) nextErrors.jenjang = 'Jenjang wajib dipilih.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    const payload: Major = {
-      id: editingId ?? Date.now(),
+    const original = rows.find(r => r.id === editingId) ?? state.majors.find(m => m.id === editingId);
+    if (!original) return;
+
+    appStore.updateMajor({
+      ...original,
       name: form.name.trim(),
       institution_id: form.institution_id,
       cluster: form.cluster as any,
       jenjang: form.jenjang as any,
       passing_grade_total: form.passing_grade_total,
-    };
+    } as Major);
+    Swal.fire({ icon: 'success', title: 'Prodi diperbarui', timer: 1500, showConfirmButton: false });
 
-    if (editingId) {
-      const original = rows.find(r => r.id === editingId) ?? state.majors.find(m => m.id === editingId);
-      appStore.updateMajor({ ...original, ...payload } as Major);
-      Swal.fire({ icon: 'success', title: 'Prodi diperbarui', timer: 1500, showConfirmButton: false });
-    } else {
-      appStore.addMajor(payload);
-      Swal.fire({ icon: 'success', title: 'Prodi ditambahkan', timer: 1500, showConfirmButton: false });
-    }
-
-    setIsAdding(false);
-    setEditingId(null);
-    resetForm();
+    closeForm();
     refresh();
-  };
-
-  const handleDelete = async (id: number, name?: string) => {
-    const confirmed = await Swal.fire({
-      icon: 'warning',
-      title: `Hapus prodi ${name || ''}?`,
-      text: 'Tindakan ini tidak dapat dibatalkan.',
-      showCancelButton: true,
-      confirmButtonText: 'Ya, hapus',
-      cancelButtonText: 'Batal',
-      confirmButtonColor: '#dc2626',
-    });
-    if (!confirmed.isConfirmed) return;
-
-    setDeletingId(id);
-    try {
-      await appStore.deleteMajor(id);
-      refresh();
-      Swal.fire({ icon: 'success', title: 'Prodi dihapus', timer: 1500, showConfirmButton: false });
-    } catch (e: any) {
-      Swal.fire('Gagal', getErrorMessage(e), 'error');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setImportLoading(true);
-    setImportError('');
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const jsonData = XLSX.utils.sheet_to_json<any>(worksheet);
-
-      if (jsonData.length === 0) {
-        throw new Error('File Excel kosong');
-      }
-
-      const defaultInstitution = state.majors.length > 0
-        ? state.majors[0].institution_id
-        : (state.institutions?.[0]?.id || 101);
-
-      const missingInstitution = jsonData.filter(row => {
-        const iid = row.institution_id || row.id_kampus;
-        return iid && !state.institutions?.some((inst: any) => inst.id === Number(iid));
-      });
-      if (missingInstitution.length > 0) {
-        const badIds = [...new Set(missingInstitution.map((r: any) => r.institution_id || r.id_kampus))];
-        throw new Error(`institution_id tidak ditemukan: ${badIds.join(', ')}. Pastikan ID kampus sesuai.`);
-      }
-
-      const majorsToInsert = jsonData.map(row => ({
-        institution_id: Number(row.institution_id || row.id_kampus) || defaultInstitution,
-        name: row.name || row.nama_prodi,
-        cluster: row.cluster || row.rumpun || 'Campuran',
-        jenjang: normalizeJenjang(row.jenjang || inferJenjang(row.name || row.nama_prodi)),
-        passing_grade_total: parseFloat(row.passing_grade_total || row.passing_grade) || 600
-      }));
-
-      const { error } = await supabase.from('majors').insert(majorsToInsert);
-      if (error) throw new Error(error.message);
-
-      await appStore.fetchMasterData();
-      refresh();
-
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      setImportError('Gagal import data: ' + getErrorMessage(err));
-    } finally {
-      setImportLoading(false);
-    }
   };
 
   return (
@@ -253,44 +152,12 @@ export const AdminMajorsView: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Manajemen Program Studi</h2>
           <p className="text-slate-500 dark:text-muted-foreground mt-1">
-            Kelola data program studi dan kampus yang tersedia.{' '}
+            Data prodi bersumber dari Mediascanter 2026.{' '}
             <span className="font-bold text-primary">{stats ? formatNumber(stats.totalProdi) : '…'} prodi</span> dari{' '}
-            <span className="font-bold text-primary">{state.institutions.length} kampus</span>.
+            <span className="font-bold text-primary">{state.institutions.length} kampus</span>. Hanya dapat mengubah data yang sudah ada.
           </p>
         </div>
-
-        <div className="flex gap-2">
-          <input
-            type="file"
-            accept=".xlsx, .xls"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-          />
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importLoading}
-            className="bg-emerald-600 text-white hover:bg-emerald-700 gap-2"
-          >
-            {importLoading ? <Upload className="w-4 h-4 animate-bounce" /> : <FileSpreadsheet className="w-4 h-4" />}
-            Import Excel
-          </Button>
-          <Button
-            onClick={startAdd}
-            className="gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Tambah Prodi Baru
-          </Button>
-        </div>
       </div>
-
-      {importError && (
-        <div className="p-4 rounded-xl bg-rose-50 text-rose-600 text-sm font-bold flex gap-2 items-center">
-          <AlertCircle className="w-5 h-5" />
-          {importError}
-        </div>
-      )}
 
       {loadError && (
         <div className="p-4 rounded-xl bg-rose-50 text-rose-600 text-sm font-bold flex gap-2 items-center">
@@ -299,12 +166,10 @@ export const AdminMajorsView: React.FC = () => {
         </div>
       )}
 
-      {isAdding && (
+      {isEditing && (
         <Card className="bg-card ring-0 border border-slate-200 dark:border-border shadow-sm">
           <CardContent className="space-y-4 p-6">
-            <h3 className="font-bold text-lg text-slate-800 dark:text-white">
-              {editingId ? 'Edit Program Studi' : 'Tambah Program Studi Baru'}
-            </h3>
+            <h3 className="font-bold text-lg text-slate-800 dark:text-white">Edit Program Studi</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2">
                 <Label className="text-xs font-semibold text-slate-500 mb-1.5 block">
@@ -381,17 +246,8 @@ export const AdminMajorsView: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-4">
-              <Button
-                variant="ghost"
-                onClick={() => { setIsAdding(false); setEditingId(null); resetForm(); }}
-              >
-                Batal
-              </Button>
-              <Button
-                onClick={handleSave}
-              >
-                {editingId ? 'Simpan Perubahan' : 'Simpan Prodi'}
-              </Button>
+              <Button variant="ghost" onClick={closeForm}>Batal</Button>
+              <Button onClick={handleSave}>Simpan Perubahan</Button>
             </div>
           </CardContent>
         </Card>
@@ -516,14 +372,9 @@ export const AdminMajorsView: React.FC = () => {
                   <p className="text-sm font-bold text-primary">{m.passing_grade_total}</p>
                 </TableCell>
                 <TableCell className="px-6 py-4 text-right">
-                  <div className="inline-flex gap-1.5">
-                    <Button variant="outline" size="icon-xs" onClick={() => startEdit(m)} title="Edit Prodi" aria-label="Edit prodi">
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button variant="destructive" size="icon-xs" onClick={() => handleDelete(m.id, m.name)} title="Hapus Prodi" aria-label="Hapus prodi" disabled={deletingId === m.id}>
-                      {deletingId === m.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    </Button>
-                  </div>
+                  <Button variant="outline" size="icon-xs" onClick={() => startEdit(m)} title="Edit Prodi" aria-label="Edit prodi">
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

@@ -290,6 +290,18 @@ export const CampusList: React.FC = () => {
 export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
   const state = useAppState();
   const institution = state.institutions.find(i => i.id === campusId);
+  const [campusRange, setCampusRange] = useState('-');
+
+  useEffect(() => {
+    let active = true;
+    getCampusPassingGradeRanges()
+      .then(rows => {
+        if (!active) return;
+        setCampusRange(rows.find(r => r.institution_id === campusId)?.range ?? '-');
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [campusId]);
 
   const [search, setSearch] = useState('');
   const [jenjang, setJenjang] = useState<JenjangFilter>('SEMUA');
@@ -391,7 +403,7 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
             <div className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-muted/50">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Range Nilai</p>
               <p className="text-lg font-extrabold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                {institution.range_min != null && institution.range_max != null ? `${institution.range_min}–${institution.range_max}` : '—'}
+                {campusRange}
               </p>
             </div>
             <div className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-muted/50">

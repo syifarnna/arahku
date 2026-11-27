@@ -26,6 +26,13 @@ import { supabase, setSupabaseCredentials } from './supabaseClient';
 import { dedupeByKey, fetchAllRows } from './supabasePaging';
 import { readMasterCache, writeMasterCache } from './masterCache';
 
+// Satu-satunya sumber data prodi: Mediascanter 2026 (kode 8 digit, year 2026).
+// Baris lama (kode 6 digit / year 2025 / tanpa kode) tidak boleh masuk ke state.
+const isMediascanterMajor = (m: { code?: string | null; year?: number | null }): boolean => {
+  const code = (m.code || '').trim();
+  return /^\d{8}$/.test(code) && (m.year == null || m.year === 2026);
+};
+
 // Label predikat capaian UTBK dari total score (sumber nilai tunggal: utbk_scores).
 export function getUtbkPredicateLabel(totalScore: number): TryoutResult['predicate'] {
   if (totalScore >= 710) return 'Sangat Baik';
@@ -722,13 +729,9 @@ class AppStore {
     for (const row of rows) {
       const code = (row.code || '').trim();
       // Fokus ke satu sumber data: hanya prodi Mediascanter (kode 8 digit, year 2026).
-      // Baris lama dari passing-grade-2025 (kode 6 digit / year 2025) dibuang.
-      if (code && (!/^\d{8}$/.test(code) || (row.year != null && row.year !== 2026))) {
-        droppedCodeById.set(row.id, code);
-        continue;
-      }
-      if (!code) {
-        kept.push(row);
+      // Baris lama / tanpa kode tidak boleh masuk ke state.
+      if (!isMediascanterMajor(row)) {
+        if (code) droppedCodeById.set(row.id, code);
         continue;
       }
       if (keptIdByCode.has(code)) {
@@ -958,8 +961,10 @@ class AppStore {
         return;
       }
       if (data.length === 0) return;
+      const allowed = data.filter((m: any) => isMediascanterMajor(m));
+      if (allowed.length === 0) return;
       const mapped: Major[] = dedupeByKey(
-        data.map((m: any) => ({
+        allowed.map((m: any) => ({
           ...m,
           institution_name: m.institutions?.name,
           institution_type: m.institutions?.type,
@@ -1071,8 +1076,11 @@ class AppStore {
       }
       const existing = this.state.majors.filter(m => m.institution_id === institutionId);
       if (data.length === 0) return existing;
+      // Guard yang sama dengan applyMajors(): hanya kode 8 digit / year 2026.
+      const allowed = data.filter((m: any) => isMediascanterMajor(m));
+      if (allowed.length === 0) return existing;
       const mapped: Major[] = dedupeByKey(
-        data.map((m: any) => ({
+        allowed.map((m: any) => ({
           ...m,
           institution_name: m.institutions?.name,
           institution_type: m.institutions?.type,

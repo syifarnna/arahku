@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bell, 
   Database, 
+  History,
   LogOut, 
   Menu, 
   Moon, 
+  RefreshCw,
   Search, 
   Sun, 
   User, 
@@ -13,6 +15,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { appStore, useAppState } from '../../lib/store';
+import { listWebUpdates, WebUpdate } from '../../lib/webUpdates';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +56,53 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const state = useAppState();
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Riwayat update web (khusus admin), dibuka dari ikon terpisah di pojok.
+  const LAST_SEEN_KEY = 'arahku_web_updates_last_seen';
+  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [updates, setUpdates] = useState<WebUpdate[]>([]);
+  const [updatesLoading, setUpdatesLoading] = useState(false);
+  const [updatesError, setUpdatesError] = useState('');
+  const [hasUnseenUpdate, setHasUnseenUpdate] = useState(false);
+  const isAdmin = state.profile.role === 'admin';
+
+  const formatUpdateTime = (iso: string) =>
+    new Date(iso).toLocaleString('id-ID', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+
+  const loadUpdates = useCallback(async () => {
+    setUpdatesLoading(true);
+    setUpdatesError('');
+    try {
+      const rows = await listWebUpdates(50);
+      setUpdates(rows);
+      if (rows.length > 0) {
+        const stamp = new Date(rows[0].created_at).getTime();
+        try { localStorage.setItem(LAST_SEEN_KEY, String(stamp)); } catch { /* abaikan */ }
+      }
+      setHasUnseenUpdate(false);
+    } catch (e: any) {
+      setUpdatesError(e?.message || 'Gagal memuat riwayat update.');
+    } finally {
+      setUpdatesLoading(false);
+    }
+  }, []);
+
+  // Titik pada ikon hanya muncul bila ada update lebih baru dari terakhir dilihat.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    listWebUpdates(50)
+      .then((rows) => {
+        if (!active || rows.length === 0) return;
+        const lastSeen = Number(localStorage.getItem(LAST_SEEN_KEY) || 0);
+        setHasUnseenUpdate(new Date(rows[0].created_at).getTime() > lastSeen);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [isAdmin]);
 
   // Sync dark mode class
   useEffect(() => {
@@ -195,6 +245,77 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Riwayat Update Web (Admin) — popup saja, tanpa halaman baru */}
+          {isAdmin && (
+            <DropdownMenu
+              open={updatesOpen}
+              onOpenChange={(open) => {
+                setUpdatesOpen(open);
+                if (open) loadUpdates();
+              }}
+            >
+              <DropdownMenuTrigger render={<Button
+                variant="ghost"
+                size="icon"
+                className={cn("rounded-xl text-slate-600 dark:text-slate-300 relative")}
+                aria-label="Riwayat update web"
+              />}>
+                <History className="w-4 h-4" />
+                {hasUnseenUpdate && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full" />
+                )}
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="end" sideOffset={8} className="w-80 sm:w-96 p-0">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-border">
+                  <span className="font-bold text-sm text-slate-800 dark:text-white">Riwayat Update Web</span>
+                  <button
+                    type="button"
+                    onClick={loadUpdates}
+                    title="Muat ulang"
+                    aria-label="Muat ulang riwayat update"
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-muted hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={cn('w-3.5 h-3.5', updatesLoading && 'animate-spin')} />
+                  </button>
+                </div>
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800/50">
+                  {updatesLoading && updates.length === 0 && (
+                    <div className="px-4 py-10 text-center text-xs text-slate-400">
+                      Memuat riwayat update...
+                    </div>
+                  )}
+                  {!updatesLoading && updatesError && (
+                    <div className="px-4 py-10 text-center text-xs text-rose-500">
+                      {updatesError}
+                    </div>
+                  )}
+                  {!updatesLoading && !updatesError && updates.length === 0 && (
+                    <div className="px-4 py-10 text-center text-xs text-slate-400">
+                      Belum ada update yang tercatat.
+                    </div>
+                  )}
+                  {updates.map((update) => (
+                    <DropdownMenuItem
+                      key={update.id}
+                      className="p-4 focus:bg-slate-50 dark:focus:bg-muted/50 cursor-default"
+                    >
+                      <div className="flex flex-col gap-1 w-full min-w-0">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-white leading-relaxed break-words">
+                          {update.message}
+                        </p>
+                        <span className="text-[10px] text-slate-400">
+                          {formatUpdateTime(update.created_at)}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           <Separator orientation="vertical" className="h-6 mx-1 hidden sm:block" />
 

@@ -274,9 +274,82 @@ SELECT setval('majors_id_seq', (SELECT MAX(id) FROM majors));
 NOTIFY pgrst, 'reload schema';
 `;
 
+
+const cleanupSql = `-- =========================================================================
+-- DATA PTN TERBARU: BERSIHKAN DATA LAMA & DUPLIKAT NILAI
+-- Sumber: data/dataptn_mediascanter.sql (dump tabel ptn)
+-- Total Mediascanter: ${majorInserts.length} prodi / ${sortedUnivs.length} universitas
+--
+-- Masalah yang diperbaiki:
+--   1) Data lama dari passing-grade-2025 (kode 6 digit, year 2025) masih hidup
+--      berdampingan dengan data Mediascanter (kode 8 digit, year 2026), sehingga
+--      passing grade / nilai dobel.
+--   2) Duplikat kode (bila ada) disatukan.
+--
+-- Jalankan SEBELUM data/import_ptn_majors.sql.
+-- =========================================================================
+CREATE TEMP TABLE _mediascanter_codes (code text PRIMARY KEY);
+INSERT INTO _mediascanter_codes (code) VALUES
+${majorInserts.map((m) => `  ('${m.code}')`).join(',\n')};
+
+-- Petakan prodi lama (kode 6 digit) ke prodi Mediascanter baru (kode 8 digit)
+-- berdasarkan kampus + nama prodi (akhiran " - KAMPUS" dibuang).
+CREATE TEMP TABLE _major_id_remap AS
+SELECT o.id AS old_id, n.id AS new_id
+FROM majors o
+JOIN institutions oi ON oi.id = o.institution_id
+JOIN majors n ON n.code IN (SELECT code FROM _mediascanter_codes)
+JOIN institutions ni ON ni.id = n.institution_id
+WHERE oi.name = ni.name
+  AND upper(btrim(regexp_replace(o.name, '\\s+-\\s+[^\\s]+\\s*$', ''))) = upper(btrim(n.name));
+
+-- Pindahkan target user ke prodi Mediascanter yang cocok.
+UPDATE target_institutions t
+SET major_id = r.new_id
+FROM _major_id_remap r
+WHERE t.major_id = r.old_id;
+
+-- Hapus target yang tidak bisa dipetakan ke data Mediascanter.
+DELETE FROM target_institutions
+WHERE major_id IS NOT NULL
+  AND major_id NOT IN (SELECT id FROM majors WHERE code IN (SELECT code FROM _mediascanter_codes));
+
+-- Hapus semua prodi yang bukan dari Mediascanter (data lama + nilai dobel).
+DELETE FROM majors
+WHERE code IS NULL
+   OR code NOT IN (SELECT code FROM _mediascanter_codes);
+
+-- Cegah duplikat kode kembali.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_majors_code
+  ON majors (code)
+  WHERE code IS NOT NULL;
+
+-- Isi ulang grade & range kampus dari data Mediascanter yang tersisa.
+UPDATE institutions i
+SET
+  grade = s.avg_pg,
+  range_min = s.min_pg,
+  range_max = s.max_pg
+FROM (
+  SELECT
+    institution_id,
+    ROUND(AVG(passing_grade_total)::numeric, 2)::double precision AS avg_pg,
+    MIN(passing_grade_total) AS min_pg,
+    MAX(passing_grade_total) AS max_pg
+  FROM majors
+  WHERE passing_grade_total IS NOT NULL
+  GROUP BY institution_id
+) s
+WHERE i.id = s.institution_id;
+
+DROP TABLE IF EXISTS _mediascanter_codes;
+DROP TABLE IF EXISTS _major_id_remap;
+`;
+
 fs.writeFileSync(path.join(__dirname, 'import_ptn_schema.sql'), schema);
 fs.writeFileSync(path.join(__dirname, 'import_ptn_institutions.sql'), institutionsSql);
 fs.writeFileSync(path.join(__dirname, 'import_ptn_majors.sql'), majorsSql);
+fs.writeFileSync(path.join(__dirname, 'import_ptn_cleanup.sql'), cleanupSql);
 
 const chunkDir = path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunkDir)) fs.mkdirSync(chunkDir, { recursive: true });
@@ -299,4 +372,5 @@ console.log('Rumpun      : ' + JSON.stringify(majorInserts.reduce((acc, m) => { 
 console.log('PG min/max  : ' + Math.min(...majorInserts.map(m => m.passing_grade_total).filter(v => v != null)) + ' / ' + Math.max(...majorInserts.map(m => m.passing_grade_total).filter(v => v != null)));
 console.log('Institutions SQL bytes:', institutionsSql.length);
 console.log('Majors SQL bytes   :', majorsSql.length);
+console.log('Cleanup SQL bytes  :', cleanupSql.length);
 console.log('Done.');

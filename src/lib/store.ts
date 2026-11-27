@@ -709,9 +709,24 @@ class AppStore {
     const kept: Major[] = [];
     const keptIdByCode = new Map<string, number>();
     const droppedCodeById = new Map<number, string>();
+    const keptIdByNormalizedName = new Map<string, number>();
+    const droppedIdToKeptId = new Map<number, number>();
+
+    const normalizeMajorName = (name: string): string =>
+      String(name || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+-\s+[^\s]+\s*$/, '')
+        .replace(/\s+/g, ' ');
 
     for (const row of rows) {
       const code = (row.code || '').trim();
+      // Fokus ke satu sumber data: hanya prodi Mediascanter (kode 8 digit, year 2026).
+      // Baris lama dari passing-grade-2025 (kode 6 digit / year 2025) dibuang.
+      if (code && (!/^\d{8}$/.test(code) || (row.year != null && row.year !== 2026))) {
+        droppedCodeById.set(row.id, code);
+        continue;
+      }
       if (!code) {
         kept.push(row);
         continue;
@@ -722,6 +737,20 @@ class AppStore {
       }
       keptIdByCode.set(code, row.id);
       kept.push(row);
+      const normalKey = `${row.institution_id}|${normalizeMajorName(row.name)}`;
+      if (!keptIdByNormalizedName.has(normalKey)) {
+        keptIdByNormalizedName.set(normalKey, row.id);
+      }
+    }
+
+    // Petakan id prodi lama (6 digit) ke id prodi baru (8 digit) bila namanya sama,
+    // supaya target user tidak hilang saat data lama dibuang.
+    for (const row of rows) {
+      const code = (row.code || '').trim();
+      if (!code || /^\d{8}$/.test(code)) continue;
+      const normalKey = `${row.institution_id}|${normalizeMajorName(row.name)}`;
+      const keptId = keptIdByNormalizedName.get(normalKey);
+      if (keptId != null) droppedIdToKeptId.set(row.id, keptId);
     }
 
     this.state.majors = kept;
@@ -730,6 +759,8 @@ class AppStore {
       const present = new Set(kept.map(m => m.id));
       const remapped = this.state.targetMajorIds.map(id => {
         if (present.has(id)) return id;
+        const mapped = droppedIdToKeptId.get(id);
+        if (mapped != null) return mapped;
         const code =
           droppedCodeById.get(id) ||
           ((previousById.get(id)?.code || '').trim() || undefined);

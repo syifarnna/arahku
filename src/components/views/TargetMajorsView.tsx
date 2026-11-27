@@ -10,9 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { CampusCombobox } from '@/components/ui/CampusCombobox';
 import { JenjangBadge } from '@/components/ui/JenjangBadge';
-import { buildProdiPgRanges } from '../../lib/pgRange';
-import { normalizeProdiKey } from '../../lib/prodiName';
-import type { Major } from '../../types';
+
+
+
 
 export const TargetMajorsView: React.FC = () => {
   const state = useAppState();
@@ -27,19 +27,6 @@ export const TargetMajorsView: React.FC = () => {
   const targetMajors = appStore.getTargetMajors();
   const unresolvedCount = Math.max(0, state.targetMajorIds.length - targetMajors.length);
 
-  // Rentang passing grade (terkecil-tertinggi) tiap prodi — prodi yang sama dari
-  // beberapa kampus dikelompokkan, jadi kartu target menampilkan rentang PG.
-  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
-
-  const pgRangeFor = (major: Major): string => {
-    const range = prodiPgRanges.get(normalizeProdiKey(major.name));
-    const pg = major.passing_grade_total;
-    if (!range) return `PG ${pg ?? '—'}`;
-    const min = Math.min(range.min, pg ?? range.min);
-    const max = Math.max(range.max, pg ?? range.max);
-    return min === max ? `PG ${min}` : `PG ${min}–${max}`;
-  };
-  
   useEffect(() => {
     let active = true;
     setIsResolvingTargets(true);
@@ -171,7 +158,7 @@ export const TargetMajorsView: React.FC = () => {
                   </Badge>
                   <div className="flex items-center gap-1.5">
                     <JenjangBadge jenjang={major.jenjang} />
-                    <span className="text-xs font-bold text-slate-500">{pgRangeFor(major)}</span>
+                    <span className="text-xs font-bold text-slate-500">PG: {major.passing_grade_total}</span>
                   </div>
                 </div>
                 <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug pt-1">{major.name}</h4>

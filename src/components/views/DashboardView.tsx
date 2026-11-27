@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppState } from '../../lib/store';
 import { appStore } from '../../lib/store';
 import { cn, formatNumber } from '../../lib/utils';
-import { buildProdiPgRanges } from '../../lib/pgRange';
-import { normalizeProdiKey } from '../../lib/prodiName';
+
+
 import { searchMajors, getMajorsStats, getPopularMajors, MajorsStats } from '../../lib/prodiSearch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -129,17 +129,6 @@ export const DashboardView: React.FC<{ onTakeTryout: (t: any) => void; setActive
   }, [searchQuery, jenjang, rumpun, hasActiveFilters]);
 
   const fmt = (n?: number | null) => n == null ? '—' : formatNumber(n);
-
-  // Rentang passing grade (terkecil-tertinggi) tiap prodi — setiap kampus yang
-  // menawarkan prodi dengan nama yang sama dikelompokkan jadi satu prodi, sehingga
-  // kartu menampilkan rentang PG tertinggi & terendah (mis. "PG 540–620").
-  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
-
-  const pgRangeFor = (m: Major): string => {
-    const range = prodiPgRanges.get(normalizeProdiKey(m.name));
-    if (!range) return `PG ${m.passing_grade_total ?? '—'}`;
-    return range.min === range.max ? `PG ${range.min}` : `PG ${range.min}–${range.max}`;
-  };
 
   const activeTargetMajorId = state.activeTargetMajorId || state.targetMajorIds[0];
   const targetMajor = activeTargetMajorId ? state.majors.find(m => m.id === activeTargetMajorId) : undefined;
@@ -459,7 +448,7 @@ const utbkCountdown = useMemo(() => {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-slate-400">Daya:</span> <span className="font-bold text-slate-700 dark:text-white">{fmt(m.daya_tampung)}</span></div>
-                  <div><span className="text-slate-400">PG:</span> <span className="font-bold text-primary">{pgRangeFor(m)}</span></div>
+                  <div><span className="text-slate-400">PG:</span> <span className="font-bold text-primary">{m.passing_grade_total ?? '—'}</span></div>
                 </div>
                 <div className="flex items-center justify-end pt-2 border-t border-slate-100 dark:border-border">
                   <Button size="sm" variant="ghost" onClick={() => { appStore.setActiveTargetMajor(m.id); setActiveTab('target_majors'); }} className="text-xs gap-1.5 h-auto">
@@ -512,7 +501,7 @@ const utbkCountdown = useMemo(() => {
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-[10px]">
                     <div><span className="text-slate-400">Daya:</span> <span className="font-bold">{fmt(m.daya_tampung)}</span></div>
-                    <div><span className="text-slate-400">PG:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{pgRangeFor(m)}</span></div>
+                    <div><span className="text-slate-400">PG:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{m.passing_grade_total ?? '—'}</span></div>
                   </div>
                 </Card>
               );

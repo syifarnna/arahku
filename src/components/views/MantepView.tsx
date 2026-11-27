@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { CampusCombobox } from '@/components/ui/CampusCombobox';
 import { JenjangBadge, normalizeJenjang } from '@/components/ui/JenjangBadge';
-import { buildProdiPgRanges } from '../../lib/pgRange';
-import { normalizeProdiKey } from '../../lib/prodiName';
+import { getCampusPassingGradeRanges } from '../../lib/prodiSearch';
+
+
 
 const DEFAULT_ALTERNATIVE_LIMIT = 3;
 
@@ -18,6 +19,19 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
   const state = useAppState();
 
   const [selectedCampusId, setSelectedCampusId] = useState<string>('');
+  const [campusRange, setCampusRange] = useState<string>('—');
+  useEffect(() => {
+    let active = true;
+    if (!selectedCampusId) { setCampusRange('—'); return; }
+    getCampusPassingGradeRanges()
+      .then((rows) => {
+        if (!active) return;
+        const r = rows.find((x) => x.institution_id === Number(selectedCampusId));
+        setCampusRange(r?.range ?? '—');
+      })
+      .catch(() => { if (active) setCampusRange('—'); });
+    return () => { active = false; };
+  }, [selectedCampusId]);
   const [selectedMajorId, setSelectedMajorId] = useState<number | null>(null);
   const [insist, setInsist] = useState(false);
   const [jenjangFilter, setJenjangFilter] = useState<'SEMUA' | string>('SEMUA');
@@ -29,19 +43,6 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
 
   const latestUtbk = appStore.getUtbkLatest();
   const autoScore = latestUtbk?.total_score ?? null;
-
-  // Rentang passing grade (terkecil-tertinggi) tiap prodi — prodi yang sama dari
-  // beberapa kampus dikelompokkan jadi satu prodi, kartu menampilkan rentang PG.
-  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
-
-  const pgRangeFor = (m: Major): string => {
-    const range = prodiPgRanges.get(normalizeProdiKey(m.name));
-    const pg = m.passing_grade_total;
-    if (!range) return `PG ${pg ?? '—'}`;
-    const min = Math.min(range.min, pg ?? range.min);
-    const max = Math.max(range.max, pg ?? range.max);
-    return min === max ? `PG ${min}` : `PG ${min}–${max}`;
-  };
 
   const campuses = useMemo(
     () => [...state.institutions].sort((a, b) => a.name.localeCompare(b.name)),
@@ -254,7 +255,7 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                     <strong className={campusGrade != null && autoScore >= campusGrade ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>
                       {fmt(campusGrade)}
                     </strong>{' '}
-                    • Range nilai {fmt(selectedCampus.range_min)} – {fmt(selectedCampus.range_max)}
+                    • Range passing grade {campusRange}
                   </p>
                   <Badge className={cn(
                     'ml-auto rounded-full text-[10px] font-bold h-auto px-2.5 py-1',
@@ -337,7 +338,7 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                           </div>
                           <div className="flex items-center gap-2 mt-1.5">
                             <Badge variant="outline" className="rounded-md text-[10px] font-bold h-auto px-1.5 py-0.5">
-                              {pgRangeFor(m)}
+PG {fmt(m.passing_grade_total)}
                             </Badge>
                             <Badge className={cn(
                               'rounded-md text-[9px] font-bold h-auto px-1.5 py-0.5',
@@ -385,7 +386,7 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                   <p className="text-xs text-slate-500 mt-1">
                     Nilai Anda <strong className="text-slate-800 dark:text-white">{fmt(autoScore)}</strong> telah lolos batas{' '}
                     <strong>Grade Campus {fmt(campusGrade)}</strong>
-                    {selectedProdi ? <> dan <strong>{pgRangeFor(selectedProdi)}</strong></> : ''}. Berikut prodi yang layak Anda pilih (Passing Grade ≤ nilai Anda):
+                    {selectedProdi ? <> dan <strong>Passing Grade {fmt(selectedProdi.passing_grade_total)}</strong></> : ''}. Berikut prodi yang layak Anda pilih (Passing Grade ≤ nilai Anda):
                   </p>
                 </div>
               </div>
@@ -418,7 +419,7 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                               {m.cluster}
                             </Badge>
                           </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">{inst?.name} • {pgRangeFor(m)}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{inst?.name} • PG {fmt(m.passing_grade_total)}</p>
                         </div>
                       </div>
                       <Badge className="rounded-full text-[10px] font-bold h-auto px-2.5 py-1 bg-emerald-500 text-white">
@@ -461,7 +462,7 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                   <p className="text-xs text-slate-500 mt-1">
                     Nilai Anda <strong className="text-slate-800 dark:text-white">{fmt(autoScore)}</strong> masih di bawah{' '}
                     <strong>Grade Campus {fmt(campusGrade)}</strong>
-                    {selectedProdi ? <> dan <strong>{pgRangeFor(selectedProdi)}</strong></> : ''}.{' '}
+                    {selectedProdi ? <> dan <strong>Passing Grade {fmt(selectedProdi.passing_grade_total)}</strong></> : ''}.{' '}
                     {delta > 0 && <>Selisih nilai kurang <strong className="text-rose-500">{delta} poin</strong>. </>}
                     Jangan khawatir — berikut rekomendasi kampus &amp; jurusan yang sesuai dengan nilai Anda.
                   </p>
@@ -503,7 +504,7 @@ export const MantepView: React.FC<{ setActiveTab?: (tab: string) => void }> = ({
                             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{m.name}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <JenjangBadge jenjang={m.jenjang} />
-                              <span className="text-[10px] text-slate-400">{pgRangeFor(m)} • {m.cluster}</span>
+                              <span className="text-[10px] text-slate-400">PG {fmt(m.passing_grade_total)} • {m.cluster}</span>
                             </div>
                           </div>
                           <Button

@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Building2, GraduationCap, Target, Layers, Loader2, ArrowLeft, ChevronRight, School } from 'lucide-react';
 import { useAppState, appStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
-import { searchMajors, getMajorsStats, useDebouncedValue, MajorsStats } from '../../lib/prodiSearch';
+import { searchMajors, getMajorsStats, useDebouncedValue, MajorsStats, getCampusPassingGradeRanges } from '../../lib/prodiSearch';
 import { matchesInstitution, primaryAbbreviation } from '../../lib/institutionSearch';
-import { buildProdiPgRanges } from '../../lib/pgRange';
-import { normalizeProdiKey } from '../../lib/prodiName';
+
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -114,7 +114,20 @@ export const UniversitasProdiView: React.FC = () => {
 
 export const CampusList: React.FC = () => {
   const state = useAppState();
+  const [campusRangeMap, setCampusRangeMap] = useState<Map<number, string>>(new Map());
   const [search, setSearch] = useState('');
+  useEffect(() => {
+    let active = true;
+    getCampusPassingGradeRanges()
+      .then((rows) => {
+        if (!active) return;
+        const m = new Map<number, string>();
+        rows.forEach((r) => m.set(r.institution_id, r.range));
+        setCampusRangeMap(m);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
   const [typeFilter, setTypeFilter] = useState<'SEMUA' | InstitutionType>('SEMUA');
   const [stats, setStats] = useState<MajorsStats>(EMPTY_STATS);
 
@@ -150,7 +163,7 @@ export const CampusList: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-800 dark:text-white">Browser Kampus &amp; Program Studi</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            {fmt(stats.totalProdi)} prodi dari {fmt(stats.universitas)} kampus • data passing grade UTBK-SNBT 2025
+            {fmt(stats.totalProdi)} prodi dari {fmt(stats.universitas)} kampus • data passing grade UTBK-SNBT 2026
           </p>
         </div>
       </div>
@@ -242,15 +255,11 @@ export const CampusList: React.FC = () => {
                 </Badge>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 dark:border-border pt-4">
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 dark:border-border pt-4">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Grade</p>
-                  <p className="text-sm font-extrabold text-primary">{i.grade != null ? i.grade : '—'}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Range</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Range PG</p>
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                    {i.range_min != null && i.range_max != null ? `${i.range_min}–${i.range_max}` : '—'}
+                    {campusRangeMap.get(i.id) ?? '—'}
                   </p>
                 </div>
                 <div>
@@ -294,20 +303,6 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
   const debouncedSearch = useDebouncedValue(search, 500);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const majorsReady = state.majors.length > 0;
-
-  // Rentang passing grade (terkecil-tertinggi) tiap prodi — prodi yang sama dari
-  // beberapa kampus dikelompokkan jadi satu prodi, kartu menampilkan rentang PG.
-  const prodiPgRanges = useMemo(() => buildProdiPgRanges(state.majors), [state.majors]);
-
-  const pgRangeFor = (m: Major): string => {
-    const range = prodiPgRanges.get(normalizeProdiKey(m.name));
-    const pg = m.passing_grade_total;
-    if (!range) return `PG ${pg ?? '—'}`;
-    const min = Math.min(range.min, pg ?? range.min);
-    const max = Math.max(range.max, pg ?? range.max);
-    return min === max ? `PG ${min}` : `PG ${min}–${max}`;
-  };
-
 
   useEffect(() => {
     setPage(1);
@@ -537,7 +532,7 @@ export const CampusDetail: React.FC<{ campusId: number }> = ({ campusId }) => {
                       <JenjangBadge jenjang={m.jenjang} />
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">{fmt(m.daya_tampung)}</td>
-                    <td className="px-4 py-3 text-right text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{pgRangeFor(m)}</td>
+                    <td className="px-4 py-3 text-right text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{m.passing_grade_total != null ? m.passing_grade_total : '—'}</td>
                     <td className="px-4 py-3 text-right">
                       {isTarget ? (
                         <Badge className="text-[10px] font-bold gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border-0">
